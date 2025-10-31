@@ -4,10 +4,7 @@ import pandas as pd
 import os
 
 from aind_data_access_api.rds_tables import Client, RDSCredentials
-
-
-def prefix_table_name(table_name: str) -> str:
-    return "zs_" + table_name
+from zombie_squirrel.utils import prefix_table_name
 
 
 class Acorn(ABC):
