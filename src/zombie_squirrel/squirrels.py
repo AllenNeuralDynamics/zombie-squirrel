@@ -4,6 +4,7 @@ from typing import Any, Callable, Optional
 from zombie_squirrel.acorns import RedshiftAcorn, MemoryAcorn
 from aind_data_access_api.document_db import MetadataDbClient
 import os
+import logging
 
 # --- Backend setup ---------------------------------------------------
 
@@ -12,8 +13,10 @@ API_GATEWAY_HOST = "api.allenneuraldynamics.org"
 tree_type = os.getenv("TREE_SPECIES", "memory").lower()
 
 if tree_type == "redshift":
+    logging.info("Using Redshift acorn for caching")
     ACORN = RedshiftAcorn()
 else:
+    logging.info("Using in-memory acorn for caching")
     ACORN = MemoryAcorn()
 
 # --- Squirrel registry -----------------------------------------------------
@@ -31,13 +34,23 @@ def register_squirrel(name: str):
 
 # --- Squirrels -----------------------------------------------------
 
+NAMES = {
+    "upn": "unique-project-names",
+    "usi": "unique-subject-ids",
+}
 
-@register_squirrel("unique-project-names")
+
+@register_squirrel(NAMES["upn"])
 def unique_project_names(force_update: bool = False) -> list[str]:
-    df = ACORN.scurry("unique-project-names")
+    try:
+        df = ACORN.scurry(NAMES["upn"])
+    except Exception as e:
+        logging.warning(f"Error fetching from cache: {e}")
+        df = pd.DataFrame()
 
     if df.empty or force_update:
         # If cache is missing, fetch data
+        logging.info("Updating cache for unique project names")
         client = MetadataDbClient(
             host=API_GATEWAY_HOST,
             version="v2",
@@ -49,14 +62,14 @@ def unique_project_names(force_update: bool = False) -> list[str]:
             ]
         )
         df = pd.DataFrame(unique_project_names)
-        ACORN.hide("unique-project-names", df)
+        ACORN.hide(NAMES["upn"], df)
 
     return df["project_name"].tolist()
 
 
-@register_squirrel("unique-subject-ids")
+@register_squirrel(NAMES["usi"])
 def unique_subject_ids(force_update: bool = False) -> list[str]:
-    df = ACORN.scurry("unique-subject-ids")
+    df = ACORN.scurry(NAMES["usi"])
 
     if df.empty or force_update:
         # If cache is missing, fetch data
@@ -71,6 +84,6 @@ def unique_subject_ids(force_update: bool = False) -> list[str]:
             ]
         )
         df = pd.DataFrame(unique_subject_ids)
-        ACORN.hide("unique-subject-ids", df)
+        ACORN.hide(NAMES["usi"], df)
 
     return df["subject_id"].tolist()
