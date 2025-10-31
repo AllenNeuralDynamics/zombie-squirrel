@@ -17,6 +17,7 @@ readme = "README.md"
 dynamic = ["version"]
 
 dependencies = [
+    'aind-data-access-api[docdb,rds]',
 ]
 
 [dependency-groups]
