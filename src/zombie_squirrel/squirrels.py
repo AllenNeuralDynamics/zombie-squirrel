@@ -5,6 +5,7 @@ from zombie_squirrel.acorns import RedshiftAcorn, MemoryAcorn
 from aind_data_access_api.document_db import MetadataDbClient
 import os
 import logging
+from zombie_squirrel.utils import prefix_table_name, rds_get_handle_empty
 
 # --- Backend setup ---------------------------------------------------
 
@@ -42,11 +43,7 @@ NAMES = {
 
 @register_squirrel(NAMES["upn"])
 def unique_project_names(force_update: bool = False) -> list[str]:
-    try:
-        df = ACORN.scurry(NAMES["upn"])
-    except Exception as e:
-        logging.warning(f"Error fetching from cache: {e}")
-        df = pd.DataFrame()
+    df = rds_get_handle_empty(ACORN, NAMES["upn"])
 
     if df.empty or force_update:
         # If cache is missing, fetch data
@@ -69,7 +66,7 @@ def unique_project_names(force_update: bool = False) -> list[str]:
 
 @register_squirrel(NAMES["usi"])
 def unique_subject_ids(force_update: bool = False) -> list[str]:
-    df = ACORN.scurry(NAMES["usi"])
+    df = rds_get_handle_empty(ACORN, NAMES["usi"])
 
     if df.empty or force_update:
         # If cache is missing, fetch data
