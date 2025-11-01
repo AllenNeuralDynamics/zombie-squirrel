@@ -37,6 +37,7 @@ def register_squirrel(name: str):
 NAMES = {
     "upn": "unique_project_names",
     "usi": "unique_subject_ids",
+    "basics": "asset_basics",
 }
 
 
@@ -84,3 +85,61 @@ def unique_subject_ids(force_update: bool = False) -> list[str]:
         ACORN.hide(NAMES["usi"], df)
 
     return df["subject_id"].tolist()
+
+
+@register_squirrel(NAMES["basics"])
+def asset_basics(force_update: bool = False) -> pd.DataFrame:
+    """Basic asset metadata.
+
+    _id, last_modified,
+    modalities, project names, data_level, subject_id, acquisition_start and _end
+    """
+    df = rds_get_handle_empty(ACORN, NAMES["basics"])
+    
+    FIELDS = [
+        "data_description.modalities",
+        "data_description.project_name",
+        "data_description.data_level",
+        "subject.subject_id",
+        "acquisition.acquisition_start_time",
+        "acquisition.acquisition_end_time",
+    ]
+
+    if df.empty or force_update:
+        logging.info("Updating cache for asset basics")
+        client = MetadataDbClient(
+            host=API_GATEWAY_HOST,
+            version="v2",
+        )
+        # It's a bit complex to get multiple fields that aren't indexed in a database
+        # as large as DocDB. We'll also try to limit ourselves to only updating fields
+        # that are necessary
+        record_ids = client.retrieve_docdb_records(
+            filter_query={}, projection={"_id": 1, "last_modified": 1}, limit=0,
+        )
+        keep_ids = []
+        # Drop all _ids where last_modified matches cache
+        for record in record_ids:
+            cached_row = df[df["_id"] == record["_id"]]
+            if cached_row.empty or cached_row["last_modified"].values[0] != record["last_modified"]:
+                keep_ids.append(record["_id"])
+
+        # Now batch by 100 IDs at a time to avoid overloading server, and fetch all the fields
+        BATCH_SIZE = 100
+        asset_records = []
+        for i in range(0, len(keep_ids), BATCH_SIZE):
+            batch_ids = keep_ids[i:i + BATCH_SIZE]
+            batch_records = client.retrieve_docdb_records(
+                filter_query={"_id": {"$in": batch_ids}},
+                projection={field: 1 for field in FIELDS + ["_id", "last_modified"]},
+                limit=0,
+            )
+            asset_records.extend(batch_records)
+
+        # Combine new records with the old df and store in cache
+        new_df = pd.DataFrame(asset_records)
+        df = pd.concat([df[df["_id"].isin(keep_ids) == False], new_df], ignore_index=True)
+
+        ACORN.hide(NAMES["basics"], df)
+
+    return df

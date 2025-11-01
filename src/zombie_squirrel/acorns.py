@@ -59,7 +59,8 @@ class MemoryAcorn(Acorn):
 
 
 def rds_get_handle_empty(acorn: Acorn, table_name: str) -> pd.DataFrame:
-    """Utility function for testing purposes."""
+    """Helper for handling errors when loading from redshift, because
+    there's no helper function """
     try:
         logging.info(f"Fetching from cache: {table_name}")
         df = acorn.scurry(table_name)
