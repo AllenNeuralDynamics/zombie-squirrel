@@ -35,8 +35,8 @@ def register_squirrel(name: str):
 # --- Squirrels -----------------------------------------------------
 
 NAMES = {
-    "upn": "unique-project-names",
-    "usi": "unique-subject-ids",
+    "upn": "unique_project_names",
+    "usi": "unique_subject_ids",
 }
 
 
@@ -69,6 +69,7 @@ def unique_subject_ids(force_update: bool = False) -> list[str]:
 
     if df.empty or force_update:
         # If cache is missing, fetch data
+        logging.info("Updating cache for unique subject IDs")
         client = MetadataDbClient(
             host=API_GATEWAY_HOST,
             version="v2",

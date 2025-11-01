@@ -61,6 +61,7 @@ class MemoryAcorn(Acorn):
 def rds_get_handle_empty(acorn: Acorn, table_name: str) -> pd.DataFrame:
     """Utility function for testing purposes."""
     try:
+        logging.info(f"Fetching from cache: {table_name}")
         df = acorn.scurry(table_name)
     except Exception as e:
         logging.warning(f"Error fetching from cache: {e}")
