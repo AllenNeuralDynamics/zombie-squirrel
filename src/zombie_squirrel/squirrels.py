@@ -1,6 +1,6 @@
 """Squirrels: functions to fetch and cache data from MongoDB."""
 import pandas as pd
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 from zombie_squirrel.acorns import RedshiftAcorn, MemoryAcorn, rds_get_handle_empty
 from aind_data_access_api.document_db import MetadataDbClient
 import os
