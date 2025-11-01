@@ -1,5 +1,6 @@
 # forest_cache/acorns.py
 from abc import ABC, abstractmethod
+import logging
 import pandas as pd
 import os
 
@@ -55,3 +56,14 @@ class MemoryAcorn(Acorn):
 
     def scurry(self, table_name: str) -> pd.DataFrame:
         return self._store.get(table_name, pd.DataFrame())
+
+
+def rds_get_handle_empty(acorn: Acorn, table_name: str) -> pd.DataFrame:
+    """Utility function for testing purposes."""
+    try:
+        df = acorn.scurry(table_name)
+    except Exception as e:
+        logging.warning(f"Error fetching from cache: {e}")
+        df = pd.DataFrame()
+
+    return df
