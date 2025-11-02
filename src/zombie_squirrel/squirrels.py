@@ -56,13 +56,13 @@ NAMES = {
 @register_squirrel(NAMES["upn"])
 def unique_project_names(force_update: bool = False) -> list[str]:
     """Fetch unique project names from metadata database.
-    
+
     Returns cached results if available, fetches from database if cache is empty
     or force_update is True.
-    
+
     Args:
         force_update: If True, bypass cache and fetch fresh data from database.
-        
+
     Returns:
         List of unique project names."""
     df = rds_get_handle_empty(ACORN, NAMES["upn"])
@@ -89,13 +89,13 @@ def unique_project_names(force_update: bool = False) -> list[str]:
 @register_squirrel(NAMES["usi"])
 def unique_subject_ids(force_update: bool = False) -> list[str]:
     """Fetch unique subject IDs from metadata database.
-    
+
     Returns cached results if available, fetches from database if cache is empty
     or force_update is True.
-    
+
     Args:
         force_update: If True, bypass cache and fetch fresh data from database.
-        
+
     Returns:
         List of unique subject IDs."""
     df = rds_get_handle_empty(ACORN, NAMES["usi"])
@@ -188,7 +188,7 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
             logging.info(
                 f"Fetching asset basics batch {i // BATCH_SIZE + 1}..."
             )
-            batch_ids = keep_ids[i: i + BATCH_SIZE]
+            batch_ids = keep_ids[i : i + BATCH_SIZE]
             batch_records = client.retrieve_docdb_records(
                 filter_query={"_id": {"$in": batch_ids}},
                 projection={
