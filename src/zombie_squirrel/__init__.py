@@ -5,4 +5,6 @@ from zombie_squirrel.squirrels import (
     unique_project_names,
     unique_subject_ids,
     asset_basics,
+    source_data,
+    raw_to_derived,
 )

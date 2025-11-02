@@ -38,6 +38,8 @@ NAMES = {
     "upn": "unique_project_names",
     "usi": "unique_subject_ids",
     "basics": "asset_basics",
+    "d2r": "source_data",
+    "r2d": "raw_to_derived",
 }
 
 
@@ -161,8 +163,95 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
 
         # Combine new records with the old df and store in cache
         new_df = pd.DataFrame(records)
-        df = pd.concat([df[df["_id"].isin(keep_ids) == False], new_df], ignore_index=True)
+        df = pd.concat([df[~df["_id"].isin(keep_ids)], new_df], ignore_index=True)
 
         ACORN.hide(NAMES["basics"], df)
+
+    return df
+
+
+@register_squirrel(NAMES["d2r"])
+def source_data(force_update: bool = False) -> pd.DataFrame:
+    """Source data from upstream assets.
+    
+    Returns a DataFrame with _id and source_data (comma-separated list).
+    """
+    df = rds_get_handle_empty(ACORN, NAMES["d2r"])
+
+    if df.empty or force_update:
+        logging.info("Updating cache for source data")
+        client = MetadataDbClient(
+            host=API_GATEWAY_HOST,
+            version="v2",
+        )
+        records = client.retrieve_docdb_records(
+            filter_query={}, projection={"_id": 1, "data_description.source_data": 1}, limit=0,
+        )
+        data = []
+        for record in records:
+            source_data_list = record.get("data_description", {}).get("source_data", [])
+            source_data_str = ", ".join(source_data_list) if source_data_list else ""
+            data.append({
+                "_id": record["_id"],
+                "source_data": source_data_str,
+            })
+        
+        df = pd.DataFrame(data)
+        ACORN.hide(NAMES["d2r"], df)
+
+    return df
+
+
+@register_squirrel(NAMES["r2d"])
+def raw_to_derived(force_update: bool = False) -> pd.DataFrame:
+    """Raw to derived record mapping.
+    
+    Returns a DataFrame with _id (raw record IDs) and derived_records (comma-separated list of derived _ids).
+    """
+    df = rds_get_handle_empty(ACORN, NAMES["r2d"])
+
+    if df.empty or force_update:
+        logging.info("Updating cache for raw to derived mapping")
+        client = MetadataDbClient(
+            host=API_GATEWAY_HOST,
+            version="v2",
+        )
+        
+        # Get all raw record IDs
+        raw_records = client.retrieve_docdb_records(
+            filter_query={"data_description.data_level": "raw"},
+            projection={"_id": 1},
+            limit=0,
+        )
+        raw_ids = {record["_id"] for record in raw_records}
+        
+        # Get all derived records with their _id and source_data
+        derived_records = client.retrieve_docdb_records(
+            filter_query={"data_description.data_level": "derived"},
+            projection={"_id": 1, "data_description.source_data": 1},
+            limit=0,
+        )
+        
+        # Build mapping: raw_id -> list of derived _ids
+        raw_to_derived_map = {raw_id: [] for raw_id in raw_ids}
+        for derived_record in derived_records:
+            source_data_list = derived_record.get("data_description", {}).get("source_data", [])
+            derived_id = derived_record["_id"]
+            # Add this derived record to each raw record it depends on
+            for source_id in source_data_list:
+                if source_id in raw_to_derived_map:
+                    raw_to_derived_map[source_id].append(derived_id)
+        
+        # Convert to DataFrame
+        data = []
+        for raw_id, derived_ids in raw_to_derived_map.items():
+            derived_ids_str = ", ".join(derived_ids)
+            data.append({
+                "_id": raw_id,
+                "derived_records": derived_ids_str,
+            })
+        
+        df = pd.DataFrame(data)
+        ACORN.hide(NAMES["r2d"], df)
 
     return df
