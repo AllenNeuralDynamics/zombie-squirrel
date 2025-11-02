@@ -34,9 +34,7 @@ class RedshiftAcorn(Acorn):
 
     def __init__(self) -> None:
         """Initialize RedshiftAcorn with Redshift credentials."""
-        REDSHIFT_SECRETS = os.getenv(
-            "REDSHIFT_SECRETS", "/aind/prod/redshift/credentials/readwrite"
-        )
+        REDSHIFT_SECRETS = os.getenv("REDSHIFT_SECRETS", "/aind/prod/redshift/credentials/readwrite")
         self.rds_client = Client(
             credentials=RDSCredentials(aws_secrets_name=REDSHIFT_SECRETS),
         )
@@ -50,9 +48,7 @@ class RedshiftAcorn(Acorn):
 
     def scurry(self, table_name: str) -> pd.DataFrame:
         """Fetch DataFrame from Redshift table."""
-        return self.rds_client.read_table(
-            table_name=prefix_table_name(table_name)
-        )
+        return self.rds_client.read_table(table_name=prefix_table_name(table_name))
 
 
 class MemoryAcorn(Acorn):

@@ -9,9 +9,7 @@ import time
 
 from zombie_squirrel import unique_project_names, unique_subject_ids
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 
 def _test_redshift_unique_project_names():
@@ -24,9 +22,7 @@ def _test_redshift_unique_project_names():
     start = time.time()
     project_names = unique_project_names()
     end = time.time()
-    logging.info(
-        f"Fetched {len(project_names)} project names in {end - start:.2} seconds."
-    )
+    logging.info(f"Fetched {len(project_names)} project names in {end - start:.2} seconds.")
     assert isinstance(project_names, list), "Result should be a list"
 
 
@@ -40,9 +36,7 @@ def _test_redshift_unique_subject_ids():
     start = time.time()
     subject_ids = unique_subject_ids()
     end = time.time()
-    logging.info(
-        f"Fetched {len(subject_ids)} subject IDs in {end - start:.2} seconds."
-    )
+    logging.info(f"Fetched {len(subject_ids)} subject IDs in {end - start:.2} seconds.")
     assert isinstance(subject_ids, list), "Result should be a list"
 
 

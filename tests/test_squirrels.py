@@ -47,9 +47,7 @@ class TestUniqueProjectNames(unittest.TestCase):
 
     @patch("zombie_squirrel.squirrels.ACORN", new_callable=MemoryAcorn)
     @patch("zombie_squirrel.squirrels.MetadataDbClient")
-    def test_unique_project_names_cache_hit(
-        self, mock_client_class, mock_acorn
-    ):
+    def test_unique_project_names_cache_hit(self, mock_client_class, mock_acorn):
         """Test returning cached project names."""
         cached_df = pd.DataFrame({"project_name": ["proj1", "proj2", "proj3"]})
         mock_acorn.hide(NAMES["upn"], cached_df)
@@ -61,9 +59,7 @@ class TestUniqueProjectNames(unittest.TestCase):
 
     @patch("zombie_squirrel.squirrels.ACORN", new_callable=MemoryAcorn)
     @patch("zombie_squirrel.squirrels.MetadataDbClient")
-    def test_unique_project_names_cache_miss(
-        self, mock_client_class, mock_acorn
-    ):
+    def test_unique_project_names_cache_miss(self, mock_client_class, mock_acorn):
         """Test fetching project names when cache is empty."""
         mock_client_instance = MagicMock()
         mock_client_class.return_value = mock_client_instance
@@ -80,18 +76,14 @@ class TestUniqueProjectNames(unittest.TestCase):
 
     @patch("zombie_squirrel.squirrels.ACORN", new_callable=MemoryAcorn)
     @patch("zombie_squirrel.squirrels.MetadataDbClient")
-    def test_unique_project_names_force_update(
-        self, mock_client_class, mock_acorn
-    ):
+    def test_unique_project_names_force_update(self, mock_client_class, mock_acorn):
         """Test force_update bypasses cache."""
         cached_df = pd.DataFrame({"project_name": ["old_proj"]})
         mock_acorn.hide(NAMES["upn"], cached_df)
 
         mock_client_instance = MagicMock()
         mock_client_class.return_value = mock_client_instance
-        mock_client_instance.aggregate_docdb_records.return_value = [
-            {"project_name": "new_proj"}
-        ]
+        mock_client_instance.aggregate_docdb_records.return_value = [{"project_name": "new_proj"}]
 
         result = unique_project_names(force_update=True)
 
@@ -116,9 +108,7 @@ class TestUniqueSubjectIds(unittest.TestCase):
 
     @patch("zombie_squirrel.squirrels.ACORN", new_callable=MemoryAcorn)
     @patch("zombie_squirrel.squirrels.MetadataDbClient")
-    def test_unique_subject_ids_cache_miss(
-        self, mock_client_class, mock_acorn
-    ):
+    def test_unique_subject_ids_cache_miss(self, mock_client_class, mock_acorn):
         """Test fetching subject IDs when cache is empty."""
         mock_client_instance = MagicMock()
         mock_client_class.return_value = mock_client_instance
@@ -134,18 +124,14 @@ class TestUniqueSubjectIds(unittest.TestCase):
 
     @patch("zombie_squirrel.squirrels.ACORN", new_callable=MemoryAcorn)
     @patch("zombie_squirrel.squirrels.MetadataDbClient")
-    def test_unique_subject_ids_force_update(
-        self, mock_client_class, mock_acorn
-    ):
+    def test_unique_subject_ids_force_update(self, mock_client_class, mock_acorn):
         """Test force_update bypasses cache."""
         cached_df = pd.DataFrame({"subject_id": ["old_sub"]})
         mock_acorn.hide(NAMES["usi"], cached_df)
 
         mock_client_instance = MagicMock()
         mock_client_class.return_value = mock_client_instance
-        mock_client_instance.aggregate_docdb_records.return_value = [
-            {"subject_id": "new_sub"}
-        ]
+        mock_client_instance.aggregate_docdb_records.return_value = [{"subject_id": "new_sub"}]
 
         result = unique_subject_ids(force_update=True)
 
@@ -218,9 +204,7 @@ class TestAssetBasics(unittest.TestCase):
 
     @patch("zombie_squirrel.squirrels.ACORN", new_callable=MemoryAcorn)
     @patch("zombie_squirrel.squirrels.MetadataDbClient")
-    def test_asset_basics_incremental_update(
-        self, mock_client_class, mock_acorn
-    ):
+    def test_asset_basics_incremental_update(self, mock_client_class, mock_acorn):
         """Test incremental cache update with partial data refresh."""
         mock_client_instance = MagicMock()
         mock_client_class.return_value = mock_client_instance
@@ -340,9 +324,7 @@ class TestRawToDerived(unittest.TestCase):
         result = raw_to_derived()
 
         self.assertEqual(len(result), 2)
-        self.assertEqual(
-            result.iloc[0]["derived_records"], "derived1, derived2"
-        )
+        self.assertEqual(result.iloc[0]["derived_records"], "derived1, derived2")
         mock_client_class.assert_not_called()
 
     @patch("zombie_squirrel.squirrels.ACORN", new_callable=MemoryAcorn)
@@ -375,9 +357,7 @@ class TestRawToDerived(unittest.TestCase):
         self.assertEqual(len(result), 2)
         raw1_row = result[result["_id"] == "raw1"]
         raw2_row = result[result["_id"] == "raw2"]
-        self.assertEqual(
-            raw1_row.iloc[0]["derived_records"], "derived1, derived2"
-        )
+        self.assertEqual(raw1_row.iloc[0]["derived_records"], "derived1, derived2")
         self.assertEqual(raw2_row.iloc[0]["derived_records"], "derived2")
 
     @patch("zombie_squirrel.squirrels.ACORN", new_callable=MemoryAcorn)

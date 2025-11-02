@@ -112,9 +112,7 @@ class TestRedshiftAcorn(unittest.TestCase):
 
     @patch("zombie_squirrel.acorns.RDSCredentials")
     @patch("zombie_squirrel.acorns.Client")
-    def test_redshift_acorn_initialization(
-        self, mock_client_class, mock_credentials_class
-    ):
+    def test_redshift_acorn_initialization(self, mock_client_class, mock_credentials_class):
         """Test RedshiftAcorn initialization."""
         mock_client_instance = MagicMock()
         mock_client_class.return_value = mock_client_instance
@@ -159,17 +157,13 @@ class TestRedshiftAcorn(unittest.TestCase):
         acorn = RedshiftAcorn()
         result = acorn.scurry("test_table")
 
-        mock_client_instance.read_table.assert_called_once_with(
-            table_name="zs_test_table"
-        )
+        mock_client_instance.read_table.assert_called_once_with(table_name="zs_test_table")
         pd.testing.assert_frame_equal(result, expected_df)
 
     @patch.dict("os.environ", {}, clear=False)
     @patch("zombie_squirrel.acorns.RDSCredentials")
     @patch("zombie_squirrel.acorns.Client")
-    def test_redshift_default_secrets_path(
-        self, mock_client_class, mock_credentials_class
-    ):
+    def test_redshift_default_secrets_path(self, mock_client_class, mock_credentials_class):
         """Test RedshiftAcorn uses default secrets path."""
         if "REDSHIFT_SECRETS" in os.environ:
             del os.environ["REDSHIFT_SECRETS"]

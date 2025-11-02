@@ -2,7 +2,8 @@
 
 import logging
 import os
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import pandas as pd
 from aind_data_access_api.document_db import MetadataDbClient
@@ -174,26 +175,18 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
         # Drop all _ids where _last_modified matches cache
         for record in record_ids:
             cached_row = df[df["_id"] == record["_id"]]
-            if (
-                cached_row.empty
-                or cached_row["_last_modified"].values[0]
-                != record["_last_modified"]
-            ):
+            if cached_row.empty or cached_row["_last_modified"].values[0] != record["_last_modified"]:
                 keep_ids.append(record["_id"])
 
         # Now batch by 100 IDs at a time to avoid overloading server, and fetch all the fields
         BATCH_SIZE = 100
         asset_records = []
         for i in range(0, len(keep_ids), BATCH_SIZE):
-            logging.info(
-                f"Fetching asset basics batch {i // BATCH_SIZE + 1}..."
-            )
+            logging.info(f"Fetching asset basics batch {i // BATCH_SIZE + 1}...")
             batch_ids = keep_ids[i : i + BATCH_SIZE]
             batch_records = client.retrieve_docdb_records(
                 filter_query={"_id": {"$in": batch_ids}},
-                projection={
-                    field: 1 for field in FIELDS + ["_id", "_last_modified"]
-                },
+                projection={field: 1 for field in FIELDS + ["_id", "_last_modified"]},
                 limit=0,
             )
             asset_records.extend(batch_records)
@@ -201,43 +194,24 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
         # Unwrap nested fields
         records = []
         for record in asset_records:
-
-            modalities = record.get("data_description", {}).get(
-                "modalities", []
-            )
-            modality_abbreviations = [
-                modality["abbreviation"]
-                for modality in modalities
-                if "abbreviation" in modality
-            ]
+            modalities = record.get("data_description", {}).get("modalities", [])
+            modality_abbreviations = [modality["abbreviation"] for modality in modalities if "abbreviation" in modality]
             modality_abbreviations_str = ", ".join(modality_abbreviations)
             flat_record = {
                 "_id": record["_id"],
                 "_last_modified": record.get("_last_modified", None),
                 "modalities": modality_abbreviations_str,
-                "project_name": record.get("data_description", {}).get(
-                    "project_name", None
-                ),
-                "data_level": record.get("data_description", {}).get(
-                    "data_level", None
-                ),
-                "subject_id": record.get("subject", {}).get(
-                    "subject_id", None
-                ),
-                "acquisition_start_time": record.get("acquisition", {}).get(
-                    "acquisition_start_time", None
-                ),
-                "acquisition_end_time": record.get("acquisition", {}).get(
-                    "acquisition_end_time", None
-                ),
+                "project_name": record.get("data_description", {}).get("project_name", None),
+                "data_level": record.get("data_description", {}).get("data_level", None),
+                "subject_id": record.get("subject", {}).get("subject_id", None),
+                "acquisition_start_time": record.get("acquisition", {}).get("acquisition_start_time", None),
+                "acquisition_end_time": record.get("acquisition", {}).get("acquisition_end_time", None),
             }
             records.append(flat_record)
 
         # Combine new records with the old df and store in cache
         new_df = pd.DataFrame(records)
-        df = pd.concat(
-            [df[~df["_id"].isin(keep_ids)], new_df], ignore_index=True
-        )
+        df = pd.concat([df[~df["_id"].isin(keep_ids)], new_df], ignore_index=True)
 
         ACORN.hide(NAMES["basics"], df)
 
@@ -271,12 +245,8 @@ def source_data(force_update: bool = False) -> pd.DataFrame:
         )
         data = []
         for record in records:
-            source_data_list = record.get("data_description", {}).get(
-                "source_data", []
-            )
-            source_data_str = (
-                ", ".join(source_data_list) if source_data_list else ""
-            )
+            source_data_list = record.get("data_description", {}).get("source_data", [])
+            source_data_str = ", ".join(source_data_list) if source_data_list else ""
             data.append(
                 {
                     "_id": record["_id"],
@@ -329,9 +299,7 @@ def raw_to_derived(force_update: bool = False) -> pd.DataFrame:
         # Build mapping: raw_id -> list of derived _ids
         raw_to_derived_map = {raw_id: [] for raw_id in raw_ids}
         for derived_record in derived_records:
-            source_data_list = derived_record.get("data_description", {}).get(
-                "source_data", []
-            )
+            source_data_list = derived_record.get("data_description", {}).get("source_data", [])
             derived_id = derived_record["_id"]
             # Add this derived record to each raw record it depends on
             for source_id in source_data_list:
