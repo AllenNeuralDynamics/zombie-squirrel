@@ -2,7 +2,7 @@
 
 __version__ = "0.4.0"
 
-from zombie_squirrel.squirrels import (
+from zombie_squirrel.squirrels import (  # noqa: F401
     asset_basics,
     raw_to_derived,
     source_data,

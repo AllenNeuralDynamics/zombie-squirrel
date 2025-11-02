@@ -1,10 +1,7 @@
 """Unit tests for zombie_squirrel.sync"""
 
-import os
 import unittest
 from unittest.mock import MagicMock, patch
-
-os.environ.setdefault("TREE_SPECIES", "memory")
 
 from zombie_squirrel.sync import hide_acorns
 

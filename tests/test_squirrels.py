@@ -1,12 +1,9 @@
 """Unit tests for zombie_squirrel.squirrels"""
 
-import os
 import unittest
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
-
-os.environ.setdefault("TREE_SPECIES", "memory")
 
 from zombie_squirrel.acorns import MemoryAcorn
 from zombie_squirrel.squirrels import (

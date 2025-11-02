@@ -160,7 +160,7 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
             logging.info(
                 f"Fetching asset basics batch {i // BATCH_SIZE + 1}..."
             )
-            batch_ids = keep_ids[i : i + BATCH_SIZE]
+            batch_ids = keep_ids[i: i + BATCH_SIZE]
             batch_records = client.retrieve_docdb_records(
                 filter_query={"_id": {"$in": batch_ids}},
                 projection={
