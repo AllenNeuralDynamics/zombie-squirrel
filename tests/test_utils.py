@@ -1,5 +1,7 @@
 """Unit tests for zombie_squirrel.utils"""
+
 import unittest
+
 from zombie_squirrel.utils import prefix_table_name
 
 

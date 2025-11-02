@@ -1,8 +1,10 @@
 """Unit tests for zombie_squirrel.acorns"""
+
 import os
 import unittest
+from unittest.mock import MagicMock, Mock, patch
+
 import pandas as pd
-from unittest.mock import Mock, patch, MagicMock
 
 os.environ.setdefault("TREE_SPECIES", "memory")
 
@@ -24,6 +26,7 @@ class TestAcornAbstractClass(unittest.TestCase):
 
     def test_acorn_subclass_must_implement_hide(self):
         """Test that subclasses must implement hide method."""
+
         class IncompleteAcorn(Acorn):
             def scurry(self, table_name: str) -> pd.DataFrame:
                 return pd.DataFrame()
@@ -33,6 +36,7 @@ class TestAcornAbstractClass(unittest.TestCase):
 
     def test_acorn_subclass_must_implement_scurry(self):
         """Test that subclasses must implement scurry method."""
+
         class IncompleteAcorn(Acorn):
             def hide(self, table_name: str, data: pd.DataFrame) -> None:
                 pass
@@ -101,7 +105,9 @@ class TestRedshiftAcorn(unittest.TestCase):
 
     @patch("zombie_squirrel.acorns.RDSCredentials")
     @patch("zombie_squirrel.acorns.Client")
-    def test_redshift_acorn_initialization(self, mock_client_class, mock_credentials_class):
+    def test_redshift_acorn_initialization(
+        self, mock_client_class, mock_credentials_class
+    ):
         """Test RedshiftAcorn initialization."""
         mock_client_instance = MagicMock()
         mock_client_class.return_value = mock_client_instance
@@ -154,7 +160,9 @@ class TestRedshiftAcorn(unittest.TestCase):
     @patch.dict("os.environ", {}, clear=False)
     @patch("zombie_squirrel.acorns.RDSCredentials")
     @patch("zombie_squirrel.acorns.Client")
-    def test_redshift_default_secrets_path(self, mock_client_class, mock_credentials_class):
+    def test_redshift_default_secrets_path(
+        self, mock_client_class, mock_credentials_class
+    ):
         """Test RedshiftAcorn uses default secrets path."""
         if "REDSHIFT_SECRETS" in os.environ:
             del os.environ["REDSHIFT_SECRETS"]

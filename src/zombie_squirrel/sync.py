@@ -1,4 +1,5 @@
 """Sync all acorns"""
+
 from .squirrels import SQUIRREL_REGISTRY
 
 

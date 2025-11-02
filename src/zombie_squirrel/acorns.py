@@ -1,10 +1,11 @@
 # forest_cache/acorns.py
-from abc import ABC, abstractmethod
 import logging
-import pandas as pd
 import os
+from abc import ABC, abstractmethod
 
+import pandas as pd
 from aind_data_access_api.rds_tables import Client, RDSCredentials
+
 from zombie_squirrel.utils import prefix_table_name
 
 
@@ -30,7 +31,9 @@ class RedshiftAcorn(Acorn):
     Redshift Client"""
 
     def __init__(self) -> None:
-        REDSHIFT_SECRETS = os.getenv("REDSHIFT_SECRETS", "/aind/prod/redshift/credentials/readwrite")
+        REDSHIFT_SECRETS = os.getenv(
+            "REDSHIFT_SECRETS", "/aind/prod/redshift/credentials/readwrite"
+        )
         self.rds_client = Client(
             credentials=RDSCredentials(aws_secrets_name=REDSHIFT_SECRETS),
         )
@@ -42,11 +45,14 @@ class RedshiftAcorn(Acorn):
         )
 
     def scurry(self, table_name: str) -> pd.DataFrame:
-        return self.rds_client.read_table(table_name=prefix_table_name(table_name))
+        return self.rds_client.read_table(
+            table_name=prefix_table_name(table_name)
+        )
 
 
 class MemoryAcorn(Acorn):
     """A simple in-memory backend for testing or local development."""
+
     def __init__(self) -> None:
         super().__init__()
         self._store: dict[str, pd.DataFrame] = {}
@@ -60,7 +66,7 @@ class MemoryAcorn(Acorn):
 
 def rds_get_handle_empty(acorn: Acorn, table_name: str) -> pd.DataFrame:
     """Helper for handling errors when loading from redshift, because
-    there's no helper function """
+    there's no helper function"""
     try:
         logging.info(f"Fetching from cache: {table_name}")
         df = acorn.scurry(table_name)

@@ -1,7 +1,8 @@
 """Unit tests for zombie_squirrel.sync"""
+
 import os
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 os.environ.setdefault("TREE_SPECIES", "memory")
 
@@ -68,7 +69,10 @@ class TestHideAcorns(unittest.TestCase):
         mock_squirrel_ok = MagicMock()
         mock_squirrel_error = MagicMock(side_effect=Exception("Update failed"))
 
-        mock_registry.values.return_value = [mock_squirrel_ok, mock_squirrel_error]
+        mock_registry.values.return_value = [
+            mock_squirrel_ok,
+            mock_squirrel_error,
+        ]
 
         with self.assertRaises(Exception) as context:
             hide_acorns()
