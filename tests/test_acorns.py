@@ -1,4 +1,7 @@
-"""Unit tests for zombie_squirrel.acorns"""
+"""Unit tests for zombie_squirrel.acorns module.
+
+Tests for abstract base class, memory backend, and Redshift backend
+for caching functionality."""
 
 import os
 import unittest
@@ -26,7 +29,10 @@ class TestAcornAbstractClass(unittest.TestCase):
         """Test that subclasses must implement hide method."""
 
         class IncompleteAcorn(Acorn):
+            """Incomplete Acorn subclass missing hide method."""
+
             def scurry(self, table_name: str) -> pd.DataFrame:
+                """Fetch records from the cache."""
                 return pd.DataFrame()
 
         with self.assertRaises(TypeError):
@@ -36,7 +42,10 @@ class TestAcornAbstractClass(unittest.TestCase):
         """Test that subclasses must implement scurry method."""
 
         class IncompleteAcorn(Acorn):
+            """Incomplete Acorn subclass missing scurry method."""
+
             def hide(self, table_name: str, data: pd.DataFrame) -> None:
+                """Store records in the cache."""
                 pass
 
         with self.assertRaises(TypeError):

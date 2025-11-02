@@ -1,4 +1,5 @@
-# forest_cache/acorns.py
+"""Storage backend interfaces for caching data."""
+
 import logging
 import os
 from abc import ABC, abstractmethod
@@ -13,6 +14,7 @@ class Acorn(ABC):
     """Base class for a storage backend (the cache)."""
 
     def __init__(self) -> None:
+        """Initialize the Acorn."""
         super().__init__()
 
     @abstractmethod
@@ -31,6 +33,7 @@ class RedshiftAcorn(Acorn):
     Redshift Client"""
 
     def __init__(self) -> None:
+        """Initialize RedshiftAcorn with Redshift credentials."""
         REDSHIFT_SECRETS = os.getenv(
             "REDSHIFT_SECRETS", "/aind/prod/redshift/credentials/readwrite"
         )
@@ -39,12 +42,14 @@ class RedshiftAcorn(Acorn):
         )
 
     def hide(self, table_name: str, data: pd.DataFrame) -> None:
+        """Store DataFrame in Redshift table."""
         self.rds_client.overwrite_table_with_df(
             df=data,
             table_name=prefix_table_name(table_name),
         )
 
     def scurry(self, table_name: str) -> pd.DataFrame:
+        """Fetch DataFrame from Redshift table."""
         return self.rds_client.read_table(
             table_name=prefix_table_name(table_name)
         )
@@ -54,13 +59,16 @@ class MemoryAcorn(Acorn):
     """A simple in-memory backend for testing or local development."""
 
     def __init__(self) -> None:
+        """Initialize MemoryAcorn with empty store."""
         super().__init__()
         self._store: dict[str, pd.DataFrame] = {}
 
     def hide(self, table_name: str, data: pd.DataFrame) -> None:
+        """Store DataFrame in memory."""
         self._store[table_name] = data
 
     def scurry(self, table_name: str) -> pd.DataFrame:
+        """Fetch DataFrame from memory."""
         return self._store.get(table_name, pd.DataFrame())
 
 

@@ -1,6 +1,7 @@
-"""
-Integration test for scurry_project_names() using Redshift backend.
-"""
+"""Integration tests for zombie-squirrel package using Redshift backend.
+
+Tests that verify squirrel functions work correctly with the Redshift
+cache backend."""
 
 import logging
 import os
@@ -14,6 +15,9 @@ logging.basicConfig(
 
 
 def _test_redshift_unique_project_names():
+    """Test fetching unique project names from Redshift backend.
+
+    Measures performance and validates result is a list of project names."""
     # Set environment variable to use Redshift backend
     os.environ["TREE_SPECIES"] = "redshift"
     # Run the function
@@ -27,6 +31,9 @@ def _test_redshift_unique_project_names():
 
 
 def _test_redshift_unique_subject_ids():
+    """Test fetching unique subject IDs from Redshift backend.
+
+    Measures performance and validates result is a list of subject IDs."""
     # Set environment variable to use Redshift backend
     os.environ["TREE_SPECIES"] = "redshift"
     # Run the function
@@ -40,6 +47,7 @@ def _test_redshift_unique_subject_ids():
 
 
 def main():
+    """Execute all integration tests."""
     _test_redshift_unique_project_names()
     _test_redshift_unique_subject_ids()
 

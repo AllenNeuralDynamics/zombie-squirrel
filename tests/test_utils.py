@@ -1,4 +1,6 @@
-"""Unit tests for zombie_squirrel.utils"""
+"""Unit tests for zombie_squirrel.utils module.
+
+Tests for utility functions."""
 
 import unittest
 

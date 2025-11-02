@@ -1,4 +1,6 @@
-"""Unit tests for zombie_squirrel.sync"""
+"""Unit tests for zombie_squirrel.sync module.
+
+Tests for cache synchronization functions."""
 
 import unittest
 from unittest.mock import MagicMock, patch

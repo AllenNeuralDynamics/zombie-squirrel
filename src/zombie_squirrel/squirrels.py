@@ -35,6 +35,7 @@ def register_squirrel(name: str):
     """Decorator for registering new squirrels."""
 
     def decorator(func):
+        """Register function in squirrel registry."""
         SQUIRREL_REGISTRY[name] = func
         return func
 
@@ -54,6 +55,16 @@ NAMES = {
 
 @register_squirrel(NAMES["upn"])
 def unique_project_names(force_update: bool = False) -> list[str]:
+    """Fetch unique project names from metadata database.
+    
+    Returns cached results if available, fetches from database if cache is empty
+    or force_update is True.
+    
+    Args:
+        force_update: If True, bypass cache and fetch fresh data from database.
+        
+    Returns:
+        List of unique project names."""
     df = rds_get_handle_empty(ACORN, NAMES["upn"])
 
     if df.empty or force_update:
@@ -77,6 +88,16 @@ def unique_project_names(force_update: bool = False) -> list[str]:
 
 @register_squirrel(NAMES["usi"])
 def unique_subject_ids(force_update: bool = False) -> list[str]:
+    """Fetch unique subject IDs from metadata database.
+    
+    Returns cached results if available, fetches from database if cache is empty
+    or force_update is True.
+    
+    Args:
+        force_update: If True, bypass cache and fetch fresh data from database.
+        
+    Returns:
+        List of unique subject IDs."""
     df = rds_get_handle_empty(ACORN, NAMES["usi"])
 
     if df.empty or force_update:
@@ -100,11 +121,18 @@ def unique_subject_ids(force_update: bool = False) -> list[str]:
 
 @register_squirrel(NAMES["basics"])
 def asset_basics(force_update: bool = False) -> pd.DataFrame:
-    """Basic asset metadata.
+    """Fetch basic asset metadata including modalities, projects, and subject info.
 
-    _id, _last_modified,
-    modalities, project names, data_level, subject_id, acquisition_start and _end
-    """
+    Returns a DataFrame with columns: _id, _last_modified, modalities,
+    project_name, data_level, subject_id, acquisition_start_time, and
+    acquisition_end_time. Uses incremental updates based on _last_modified
+    timestamps to avoid re-fetching unchanged records.
+
+    Args:
+        force_update: If True, bypass cache and fetch fresh data from database.
+
+    Returns:
+        DataFrame with basic asset metadata."""
     df = rds_get_handle_empty(ACORN, NAMES["basics"])
 
     FIELDS = [
@@ -218,10 +246,16 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
 
 @register_squirrel(NAMES["d2r"])
 def source_data(force_update: bool = False) -> pd.DataFrame:
-    """Source data from upstream assets.
+    """Fetch source data references for derived records.
 
-    Returns a DataFrame with _id and source_data (comma-separated list).
-    """
+    Returns a DataFrame mapping record IDs to their upstream source data
+    dependencies as comma-separated lists.
+
+    Args:
+        force_update: If True, bypass cache and fetch fresh data from database.
+
+    Returns:
+        DataFrame with _id and source_data columns."""
     df = rds_get_handle_empty(ACORN, NAMES["d2r"])
 
     if df.empty or force_update:
@@ -258,10 +292,16 @@ def source_data(force_update: bool = False) -> pd.DataFrame:
 
 @register_squirrel(NAMES["r2d"])
 def raw_to_derived(force_update: bool = False) -> pd.DataFrame:
-    """Raw to derived record mapping.
+    """Fetch mapping of raw records to their derived records.
 
-    Returns a DataFrame with _id (raw record IDs) and derived_records (comma-separated list of derived _ids).
-    """
+    Returns a DataFrame mapping raw record IDs to lists of derived record IDs
+    that depend on them as source data.
+
+    Args:
+        force_update: If True, bypass cache and fetch fresh data from database.
+
+    Returns:
+        DataFrame with _id and derived_records columns."""
     df = rds_get_handle_empty(ACORN, NAMES["r2d"])
 
     if df.empty or force_update:
