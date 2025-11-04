@@ -32,10 +32,12 @@ Options are 'REDSHIFT', 'MEMORY'.
 ### Scurry (fetch) data
 
 ```python
-import zombie_squirrel as zs
-
-unique_project_names = zs.scurry_project_names()
+from zombie_squirrel import unique_project_names()
 ```
+
+| Function | Description |
+| -------- | ----------- |
+| unique_project_names | 
 
 ### Hide the acorns
 
