@@ -1,1 +1,1 @@
-"""Testing library"""
+"""Unit tests for zombie-squirrel package."""
