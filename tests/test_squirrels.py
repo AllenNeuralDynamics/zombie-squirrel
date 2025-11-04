@@ -2,6 +2,7 @@
 
 Tests for squirrel functions, caching, and registry mechanism."""
 
+import os
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -17,6 +18,17 @@ from zombie_squirrel.squirrels import (
     unique_project_names,
     unique_subject_ids,
 )
+
+
+class TestBackendSetup(unittest.TestCase):
+
+    @patch.dict(os.environ, {"TREE_SPECIES": "redshift"})
+    @patch("zombie_squirrel.squirrels.RedshiftAcorn")
+    def test_redshift_backend_initialization(self, mock_redshift):
+        import importlib
+        import zombie_squirrel.squirrels
+        importlib.reload(zombie_squirrel.squirrels)
+        mock_redshift.assert_called()
 
 
 class TestSquirrelRegistration(unittest.TestCase):

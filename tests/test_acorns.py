@@ -165,8 +165,8 @@ class TestRedshiftAcorn(unittest.TestCase):
     @patch("zombie_squirrel.acorns.Client")
     def test_redshift_default_secrets_path(self, mock_client_class, mock_credentials_class):
         """Test RedshiftAcorn uses default secrets path."""
-        if "REDSHIFT_SECRETS" in os.environ:
-            del os.environ["REDSHIFT_SECRETS"]
+        if "REDSHIFT_SECRETS" in os.environ:  # pragma: no cover
+            del os.environ["REDSHIFT_SECRETS"]  # pragma: no cover
 
         mock_client_instance = MagicMock()
         mock_client_class.return_value = mock_client_instance
