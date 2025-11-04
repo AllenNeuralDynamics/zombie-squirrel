@@ -7,7 +7,7 @@
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 ![Python](https://img.shields.io/badge/python->=3.10-blue?logo=python)
 
-<img src="zombie-squirrel_logo.png" width="400" alt="Logo">
+<img src="zombie-squirrel_logo.png" width="400" alt="Logo (image from ChatGPT)">
 
 ## Installation
 
