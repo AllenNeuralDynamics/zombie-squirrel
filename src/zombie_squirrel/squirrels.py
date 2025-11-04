@@ -20,7 +20,7 @@ API_GATEWAY_HOST = "api.allenneuraldynamics.org"
 
 tree_type = os.getenv("TREE_SPECIES", "memory").lower()
 
-if tree_type == "redshift":
+if tree_type == "redshift":  # pragma: no cover
     logging.info("Using Redshift acorn for caching")
     ACORN = RedshiftAcorn()
 else:

@@ -20,12 +20,12 @@ class Acorn(ABC):
     @abstractmethod
     def hide(self, table_name: str, data: pd.DataFrame) -> None:
         """Store records in the cache."""
-        pass
+        pass  # pragma: no cover
 
     @abstractmethod
     def scurry(self, table_name: str) -> pd.DataFrame:
         """Fetch records from the cache."""
-        pass
+        pass  # pragma: no cover
 
 
 class RedshiftAcorn(Acorn):
