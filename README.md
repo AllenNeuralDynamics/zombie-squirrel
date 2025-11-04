@@ -32,12 +32,16 @@ Options are 'REDSHIFT', 'MEMORY'.
 ### Scurry (fetch) data
 
 ```python
-from zombie_squirrel import unique_project_names()
+from zombie_squirrel import unique_project_names, unique_subject_ids, asset_basics, source_data, raw_to_derived
 ```
 
 | Function | Description |
 | -------- | ----------- |
-| unique_project_names | 
+| `unique_project_names` | Fetch unique project names from docdb |
+| `unique_subject_ids` | Fetch unique subject IDs from docdb |
+| `asset_basics` | Fetch basic asset metadata including modalities, projects, and subject info |
+| `source_data` | Fetch source data references for derived records |
+| `raw_to_derived` | Fetch mapping of raw records to their derived records | 
 
 ### Hide the acorns
 
