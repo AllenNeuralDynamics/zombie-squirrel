@@ -23,5 +23,4 @@ jobs:
     - name: Run linter checks
       run: ruff check . && ruff format --check . && interrogate --verbose .
     - name: Run tests and coverage
-      run: export TREE_SPECIES=memory
-      run: coverage run run_tests.py && coverage report
+      run: export TREE_SPECIES=memory && coverage run run_tests.py && coverage report
