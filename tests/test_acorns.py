@@ -31,7 +31,7 @@ class TestAcornAbstractClass(unittest.TestCase):
         class IncompleteAcorn(Acorn):
             """Incomplete Acorn subclass missing hide method."""
 
-            def scurry(self, table_name: str) -> pd.DataFrame:
+            def scurry(self, table_name: str) -> pd.DataFrame:  # pragma: no cover
                 """Fetch records from the cache."""
                 return pd.DataFrame()
 
@@ -44,7 +44,7 @@ class TestAcornAbstractClass(unittest.TestCase):
         class IncompleteAcorn(Acorn):
             """Incomplete Acorn subclass missing scurry method."""
 
-            def hide(self, table_name: str, data: pd.DataFrame) -> None:
+            def hide(self, table_name: str, data: pd.DataFrame) -> None:  # pragma: no cover
                 """Store records in the cache."""
                 pass
 
