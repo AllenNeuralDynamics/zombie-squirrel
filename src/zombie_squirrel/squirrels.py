@@ -143,6 +143,9 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
         "subject.subject_id",
         "acquisition.acquisition_start_time",
         "acquisition.acquisition_end_time",
+        "processing.data_processes.start_date_time",
+        "subject.subject_details.genotype",
+        "location",
     ]
 
     if df.empty or force_update:
@@ -157,6 +160,9 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
                 "subject_id",
                 "acquisition_start_time",
                 "acquisition_end_time",
+                "process_date",
+                "genotype",
+                "location",
             ]
         )
         client = MetadataDbClient(
@@ -183,7 +189,7 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
         asset_records = []
         for i in range(0, len(keep_ids), BATCH_SIZE):
             logging.info(f"Fetching asset basics batch {i // BATCH_SIZE + 1}...")
-            batch_ids = keep_ids[i : i + BATCH_SIZE]
+            batch_ids = keep_ids[i: i + BATCH_SIZE]
             batch_records = client.retrieve_docdb_records(
                 filter_query={"_id": {"$in": batch_ids}},
                 projection={field: 1 for field in FIELDS + ["_id", "_last_modified"]},
@@ -197,6 +203,14 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
             modalities = record.get("data_description", {}).get("modalities", [])
             modality_abbreviations = [modality["abbreviation"] for modality in modalities if "abbreviation" in modality]
             modality_abbreviations_str = ", ".join(modality_abbreviations)
+
+            # Get the process date, convert to YYYY-MM-DD if present
+            process_datetime = record.get("processing", {}).get("data_processes", [{}])[-1].get("start_date_time", None)
+            if process_datetime:
+                process_date = process_datetime.split("T")[0]
+            else:
+                process_date = None
+
             flat_record = {
                 "_id": record["_id"],
                 "_last_modified": record.get("_last_modified", None),
@@ -206,6 +220,9 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
                 "subject_id": record.get("subject", {}).get("subject_id", None),
                 "acquisition_start_time": record.get("acquisition", {}).get("acquisition_start_time", None),
                 "acquisition_end_time": record.get("acquisition", {}).get("acquisition_end_time", None),
+                "process_date": process_date,
+                "genotype": record.get("subject", {}).get("subject_details", {}).get("genotype", None),
+                "location": record.get("location", None),
             }
             records.append(flat_record)
 
