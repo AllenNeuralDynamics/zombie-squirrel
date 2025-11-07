@@ -205,8 +205,10 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
             modality_abbreviations_str = ", ".join(modality_abbreviations)
 
             # Get the process date, convert to YYYY-MM-DD if present
-            process_datetime = record.get("processing", {}).get("data_processes", [{}])[-1].get("start_date_time", None)
-            if process_datetime:
+            data_processes = record.get("processing", {}).get("data_processes", [])
+            if data_processes:
+                latest_process = data_processes[-1]
+                process_datetime = latest_process.get("start_date_time", None)
                 process_date = process_datetime.split("T")[0]
             else:
                 process_date = None
@@ -317,6 +319,8 @@ def raw_to_derived(force_update: bool = False) -> pd.DataFrame:
         raw_to_derived_map = {raw_id: [] for raw_id in raw_ids}
         for derived_record in derived_records:
             source_data_list = derived_record.get("data_description", {}).get("source_data", [])
+            if not source_data_list:
+                continue
             derived_id = derived_record["_id"]
             # Add this derived record to each raw record it depends on
             for source_id in source_data_list:
