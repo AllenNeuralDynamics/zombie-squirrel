@@ -4,7 +4,6 @@ Tests that verify squirrel functions work correctly with the Redshift
 cache backend."""
 
 import logging
-import os
 import time
 
 from zombie_squirrel import unique_project_names, unique_subject_ids
@@ -12,12 +11,9 @@ from zombie_squirrel import unique_project_names, unique_subject_ids
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 
-def _test_redshift_unique_project_names():
-    """Test fetching unique project names from Redshift backend.
-
+def test_s3_unique_project_names():
+    """Test fetching unique project names from S3 backend.
     Measures performance and validates result is a list of project names."""
-    # Set environment variable to use Redshift backend
-    os.environ["TREE_SPECIES"] = "redshift"
     # Run the function
     start = time.time()
     project_names = unique_project_names()
@@ -26,12 +22,8 @@ def _test_redshift_unique_project_names():
     assert isinstance(project_names, list), "Result should be a list"
 
 
-def _test_redshift_unique_subject_ids():
-    """Test fetching unique subject IDs from Redshift backend.
-
-    Measures performance and validates result is a list of subject IDs."""
-    # Set environment variable to use Redshift backend
-    os.environ["TREE_SPECIES"] = "redshift"
+def test_s3_unique_subject_ids():
+    """Test fetching unique subject IDs from Redshift backenof subject IDs."""
     # Run the function
     start = time.time()
     subject_ids = unique_subject_ids()
@@ -42,8 +34,8 @@ def _test_redshift_unique_subject_ids():
 
 def main():
     """Execute all integration tests."""
-    _test_redshift_unique_project_names()
-    _test_redshift_unique_subject_ids()
+    test_s3_unique_project_names()
+    test_s3_unique_subject_ids()
 
 
 if __name__ == "__main__":

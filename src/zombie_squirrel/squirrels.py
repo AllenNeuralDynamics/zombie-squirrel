@@ -10,8 +10,7 @@ from aind_data_access_api.document_db import MetadataDbClient
 
 from zombie_squirrel.acorns import (
     MemoryAcorn,
-    RedshiftAcorn,
-    rds_get_handle_empty,
+    S3Acorn,
 )
 
 # --- Backend setup ---------------------------------------------------
@@ -20,9 +19,9 @@ API_GATEWAY_HOST = "api.allenneuraldynamics.org"
 
 tree_type = os.getenv("TREE_SPECIES", "memory").lower()
 
-if tree_type == "redshift":  # pragma: no cover
-    logging.info("Using Redshift acorn for caching")
-    ACORN = RedshiftAcorn()
+if tree_type == "s3":  # pragma: no cover
+    logging.info("Using S3 acorn for caching")
+    ACORN = S3Acorn()
 else:
     logging.info("Using in-memory acorn for caching")
     ACORN = MemoryAcorn()
@@ -66,7 +65,7 @@ def unique_project_names(force_update: bool = False) -> list[str]:
 
     Returns:
         List of unique project names."""
-    df = rds_get_handle_empty(ACORN, NAMES["upn"])
+    df = ACORN.scurry(NAMES["upn"])
 
     if df.empty or force_update:
         # If cache is missing, fetch data
@@ -99,7 +98,7 @@ def unique_subject_ids(force_update: bool = False) -> list[str]:
 
     Returns:
         List of unique subject IDs."""
-    df = rds_get_handle_empty(ACORN, NAMES["usi"])
+    df = ACORN.scurry(NAMES["usi"])
 
     if df.empty or force_update:
         # If cache is missing, fetch data
@@ -134,7 +133,7 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
 
     Returns:
         DataFrame with basic asset metadata."""
-    df = rds_get_handle_empty(ACORN, NAMES["basics"])
+    df = ACORN.scurry(NAMES["basics"])
 
     FIELDS = [
         "data_description.modalities",
@@ -249,7 +248,7 @@ def source_data(force_update: bool = False) -> pd.DataFrame:
 
     Returns:
         DataFrame with _id and source_data columns."""
-    df = rds_get_handle_empty(ACORN, NAMES["d2r"])
+    df = ACORN.scurry(NAMES["d2r"])
 
     if df.empty or force_update:
         logging.info("Updating cache for source data")
@@ -291,7 +290,7 @@ def raw_to_derived(force_update: bool = False) -> pd.DataFrame:
 
     Returns:
         DataFrame with _id and derived_records columns."""
-    df = rds_get_handle_empty(ACORN, NAMES["r2d"])
+    df = ACORN.scurry(NAMES["r2d"])
 
     if df.empty or force_update:
         logging.info("Updating cache for raw to derived mapping")
@@ -319,8 +318,6 @@ def raw_to_derived(force_update: bool = False) -> pd.DataFrame:
         raw_to_derived_map = {raw_id: [] for raw_id in raw_ids}
         for derived_record in derived_records:
             source_data_list = derived_record.get("data_description", {}).get("source_data", [])
-            if not source_data_list:
-                continue
             derived_id = derived_record["_id"]
             # Add this derived record to each raw record it depends on
             for source_id in source_data_list:

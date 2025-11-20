@@ -204,7 +204,47 @@ class TestAssetBasics(unittest.TestCase):
 
     @patch("zombie_squirrel.squirrels.ACORN", new_callable=MemoryAcorn)
     @patch("zombie_squirrel.squirrels.MetadataDbClient")
-    def test_asset_basics_incremental_update(self, mock_client_class, mock_acorn):
+    def test_asset_basics_with_data_processes(
+        self, mock_client_class, mock_acorn
+    ):
+        """Test asset_basics includes process_date from data_processes."""
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "id1",
+                "_last_modified": "2023-01-01",
+                "data_description": {
+                    "modalities": [{"abbreviation": "img"}],
+                    "project_name": "proj1",
+                    "data_level": "raw",
+                },
+                "subject": {"subject_id": "sub001"},
+                "acquisition": {
+                    "acquisition_start_time": "2023-01-01T10:00:00",
+                    "acquisition_end_time": "2023-01-01T11:00:00",
+                },
+                "processing": {
+                    "data_processes": [
+                        {"start_date_time": "2023-01-15T14:30:00"},
+                        {"start_date_time": "2023-01-20T09:15:00"},
+                    ]
+                },
+            }
+        ]
+
+        result = asset_basics()
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result.iloc[0]["_id"], "id1")
+        self.assertEqual(result.iloc[0]["process_date"], "2023-01-20")
+
+    @patch("zombie_squirrel.squirrels.ACORN", new_callable=MemoryAcorn)
+    @patch("zombie_squirrel.squirrels.MetadataDbClient")
+    def test_asset_basics_incremental_update(
+        self, mock_client_class, mock_acorn
+    ):
         """Test incremental cache update with partial data refresh."""
         mock_client_instance = MagicMock()
         mock_client_class.return_value = mock_client_instance

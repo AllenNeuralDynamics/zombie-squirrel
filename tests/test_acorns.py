@@ -1,9 +1,8 @@
 """Unit tests for zombie_squirrel.acorns module.
 
-Tests for abstract base class, memory backend, and Redshift backend
+Tests for abstract base class, memory backend, and S3 backend
 for caching functionality."""
 
-import os
 import unittest
 from unittest.mock import MagicMock, Mock, patch
 
@@ -12,8 +11,7 @@ import pandas as pd
 from zombie_squirrel.acorns import (
     Acorn,
     MemoryAcorn,
-    RedshiftAcorn,
-    rds_get_handle_empty,
+    S3Acorn,
 )
 
 
@@ -107,107 +105,76 @@ class TestMemoryAcorn(unittest.TestCase):
         pd.testing.assert_frame_equal(df, retrieved)
 
 
-class TestRedshiftAcorn(unittest.TestCase):
-    """Tests for RedshiftAcorn implementation with mocking."""
+class TestS3Acorn(unittest.TestCase):
+    """Tests for S3Acorn implementation with mocking."""
 
-    @patch("zombie_squirrel.acorns.RDSCredentials")
-    @patch("zombie_squirrel.acorns.Client")
-    def test_redshift_acorn_initialization(self, mock_client_class, mock_credentials_class):
-        """Test RedshiftAcorn initialization."""
-        mock_client_instance = MagicMock()
-        mock_client_class.return_value = mock_client_instance
-        mock_credentials_instance = MagicMock()
-        mock_credentials_class.return_value = mock_credentials_instance
+    @patch("zombie_squirrel.acorns.boto3.client")
+    def test_s3_acorn_initialization(self, mock_boto3_client):
+        """Test S3Acorn initialization."""
+        mock_s3_client = MagicMock()
+        mock_boto3_client.return_value = mock_s3_client
 
-        acorn = RedshiftAcorn()
+        acorn = S3Acorn()
 
-        self.assertEqual(acorn.rds_client, mock_client_instance)
-        mock_client_class.assert_called_once()
+        self.assertEqual(acorn.bucket, "aind-scratch-data")
+        self.assertEqual(acorn.s3_client, mock_s3_client)
+        mock_boto3_client.assert_called_once_with("s3")
 
-    @patch("zombie_squirrel.acorns.RDSCredentials")
-    @patch("zombie_squirrel.acorns.Client")
-    def test_redshift_hide(self, mock_client_class, mock_credentials_class):
-        """Test RedshiftAcorn.hide method."""
-        mock_client_instance = MagicMock()
-        mock_client_class.return_value = mock_client_instance
-        mock_credentials_instance = MagicMock()
-        mock_credentials_class.return_value = mock_credentials_instance
+    @patch("zombie_squirrel.acorns.boto3.client")
+    def test_s3_hide(self, mock_boto3_client):
+        """Test S3Acorn.hide method writes to S3."""
+        mock_s3_client = MagicMock()
+        mock_boto3_client.return_value = mock_s3_client
 
-        acorn = RedshiftAcorn()
+        acorn = S3Acorn()
         df = pd.DataFrame({"col1": [1, 2, 3]})
 
         acorn.hide("test_table", df)
 
-        mock_client_instance.overwrite_table_with_df.assert_called_once()
-        call_args = mock_client_instance.overwrite_table_with_df.call_args
-        pd.testing.assert_frame_equal(call_args[1]["df"], df)
-        self.assertEqual(call_args[1]["table_name"], "zs_test_table")
+        mock_s3_client.put_object.assert_called_once()
+        call_kwargs = mock_s3_client.put_object.call_args[1]
+        self.assertEqual(call_kwargs["Bucket"], "aind-scratch-data")
+        self.assertEqual(
+            call_kwargs["Key"], "application-caches/zs_test_table.pqt"
+        )
+        self.assertIsInstance(call_kwargs["Body"], bytes)
 
-    @patch("zombie_squirrel.acorns.RDSCredentials")
-    @patch("zombie_squirrel.acorns.Client")
-    def test_redshift_scurry(self, mock_client_class, mock_credentials_class):
-        """Test RedshiftAcorn.scurry method."""
-        mock_client_instance = MagicMock()
+    @patch("zombie_squirrel.acorns.duckdb.query")
+    @patch("zombie_squirrel.acorns.boto3.client")
+    def test_s3_scurry(self, mock_boto3_client, mock_duckdb_query):
+        """Test S3Acorn.scurry method reads from S3 using DuckDB."""
+        mock_s3_client = MagicMock()
+        mock_boto3_client.return_value = mock_s3_client
+
         expected_df = pd.DataFrame({"col1": [1, 2, 3]})
-        mock_client_instance.read_table.return_value = expected_df
-        mock_client_class.return_value = mock_client_instance
-        mock_credentials_instance = MagicMock()
-        mock_credentials_class.return_value = mock_credentials_instance
+        mock_result = MagicMock()
+        mock_result.to_df.return_value = expected_df
+        mock_duckdb_query.return_value = mock_result
 
-        acorn = RedshiftAcorn()
+        acorn = S3Acorn()
         result = acorn.scurry("test_table")
 
-        mock_client_instance.read_table.assert_called_once_with(table_name="zs_test_table")
+        # Verify DuckDB was called with correct S3 path
+        mock_duckdb_query.assert_called_once()
+        query_call = mock_duckdb_query.call_args[0][0]
+        self.assertIn(
+            "s3://aind-scratch-data/application-caches/zs_test_table.pqt",
+            query_call,
+        )
         pd.testing.assert_frame_equal(result, expected_df)
 
-    @patch.dict("os.environ", {}, clear=False)
-    @patch("zombie_squirrel.acorns.RDSCredentials")
-    @patch("zombie_squirrel.acorns.Client")
-    def test_redshift_default_secrets_path(self, mock_client_class, mock_credentials_class):
-        """Test RedshiftAcorn uses default secrets path."""
-        if "REDSHIFT_SECRETS" in os.environ:  # pragma: no cover
-            del os.environ["REDSHIFT_SECRETS"]  # pragma: no cover
+    @patch("zombie_squirrel.acorns.duckdb.query")
+    @patch("zombie_squirrel.acorns.boto3.client")
+    def test_s3_scurry_handles_error(
+        self, mock_boto3_client, mock_duckdb_query
+    ):
+        """Test S3Acorn.scurry returns empty DataFrame on error."""
+        mock_s3_client = MagicMock()
+        mock_boto3_client.return_value = mock_s3_client
+        mock_duckdb_query.side_effect = Exception("S3 access error")
 
-        mock_client_instance = MagicMock()
-        mock_client_class.return_value = mock_client_instance
-        mock_credentials_instance = MagicMock()
-        mock_credentials_class.return_value = mock_credentials_instance
-
-        RedshiftAcorn()
-
-        mock_client_class.assert_called_once()
-        call_args = mock_client_class.call_args
-        self.assertIsNotNone(call_args)
-
-
-class TestRdsGetHandleEmpty(unittest.TestCase):
-    """Tests for rds_get_handle_empty helper function."""
-
-    def test_rds_get_handle_empty_success(self):
-        """Test successful retrieval from acorn."""
-        acorn = MemoryAcorn()
-        df = pd.DataFrame({"col1": [1, 2, 3]})
-        acorn.hide("test_table", df)
-
-        result = rds_get_handle_empty(acorn, "test_table")
-
-        pd.testing.assert_frame_equal(result, df)
-
-    def test_rds_get_handle_empty_missing_table(self):
-        """Test returns empty DataFrame when table is missing."""
-        acorn = MemoryAcorn()
-
-        result = rds_get_handle_empty(acorn, "nonexistent_table")
-
-        self.assertTrue(result.empty)
-        self.assertIsInstance(result, pd.DataFrame)
-
-    def test_rds_get_handle_empty_exception(self):
-        """Test returns empty DataFrame when acorn raises exception."""
-        acorn = Mock(spec=["scurry"])
-        acorn.scurry.side_effect = Exception("Connection error")
-
-        result = rds_get_handle_empty(acorn, "test_table")
+        acorn = S3Acorn()
+        result = acorn.scurry("nonexistent_table")
 
         self.assertTrue(result.empty)
         self.assertIsInstance(result, pd.DataFrame)

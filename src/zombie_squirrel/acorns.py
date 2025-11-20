@@ -1,13 +1,14 @@
 """Storage backend interfaces for caching data."""
 
+import io
 import logging
-import os
 from abc import ABC, abstractmethod
 
+import boto3
+import duckdb
 import pandas as pd
-from aind_data_access_api.rds_tables import Client, RDSCredentials
 
-from zombie_squirrel.utils import prefix_table_name
+from zombie_squirrel.utils import get_s3_cache_path, prefix_table_name
 
 
 class Acorn(ABC):
@@ -28,27 +29,54 @@ class Acorn(ABC):
         pass  # pragma: no cover
 
 
-class RedshiftAcorn(Acorn):
-    """Stores and retrieves caches using aind-data-access-api
-    Redshift Client"""
+class S3Acorn(Acorn):
+    """Stores and retrieves caches using AWS S3 with parquet files."""
 
     def __init__(self) -> None:
-        """Initialize RedshiftAcorn with Redshift credentials."""
-        REDSHIFT_SECRETS = os.getenv("REDSHIFT_SECRETS", "/aind/prod/redshift/credentials/readwrite")
-        self.rds_client = Client(
-            credentials=RDSCredentials(aws_secrets_name=REDSHIFT_SECRETS),
-        )
+        """Initialize S3Acorn with S3 client."""
+        self.bucket = "aind-scratch-data"
+        self.s3_client = boto3.client("s3")
 
     def hide(self, table_name: str, data: pd.DataFrame) -> None:
-        """Store DataFrame in Redshift table."""
-        self.rds_client.overwrite_table_with_df(
-            df=data,
-            table_name=prefix_table_name(table_name),
+        """Store DataFrame as parquet file in S3."""
+        filename = prefix_table_name(table_name)
+        s3_key = get_s3_cache_path(filename)
+
+        # Convert DataFrame to parquet bytes
+        parquet_buffer = io.BytesIO()
+        data.to_parquet(parquet_buffer, index=False)
+        parquet_buffer.seek(0)
+
+        # Upload to S3
+        self.s3_client.put_object(
+            Bucket=self.bucket,
+            Key=s3_key,
+            Body=parquet_buffer.getvalue(),
         )
+        logging.info(f"Stored cache to S3: s3://{self.bucket}/{s3_key}")
 
     def scurry(self, table_name: str) -> pd.DataFrame:
-        """Fetch DataFrame from Redshift table."""
-        return self.rds_client.read_table(table_name=prefix_table_name(table_name))
+        """Fetch DataFrame from S3 parquet file."""
+        filename = prefix_table_name(table_name)
+        s3_key = get_s3_cache_path(filename)
+
+        try:
+            # Read directly from S3 using DuckDB
+            query = f"""
+                SELECT * FROM read_parquet(
+                    's3://{self.bucket}/{s3_key}'
+                )
+            """
+            result = duckdb.query(query).to_df()
+            logging.info(
+                f"Retrieved cache from S3: s3://{self.bucket}/{s3_key}"
+            )
+            return result
+        except Exception as e:
+            logging.warning(
+                f"Error fetching from cache {s3_key}: {e}"
+            )
+            return pd.DataFrame()
 
 
 class MemoryAcorn(Acorn):
@@ -66,16 +94,3 @@ class MemoryAcorn(Acorn):
     def scurry(self, table_name: str) -> pd.DataFrame:
         """Fetch DataFrame from memory."""
         return self._store.get(table_name, pd.DataFrame())
-
-
-def rds_get_handle_empty(acorn: Acorn, table_name: str) -> pd.DataFrame:
-    """Helper for handling errors when loading from redshift, because
-    there's no helper function"""
-    try:
-        logging.info(f"Fetching from cache: {table_name}")
-        df = acorn.scurry(table_name)
-    except Exception as e:
-        logging.warning(f"Error fetching from cache: {e}")
-        df = pd.DataFrame()
-
-    return df

@@ -17,7 +17,11 @@ readme = "README.md"
 dynamic = ["version"]
 
 dependencies = [
-    'aind-data-access-api[docdb,rds]',
+    'duckdb',
+    'fastparquet',
+    'boto3',
+    'pandas',
+    'aind-data-access-api[docdb]',
 ]
 
 [dependency-groups]
