@@ -23,11 +23,10 @@ uv sync
 ### Set backend
 
 ```bash
-export REDSHIFT_SECRETS='/aind/prod/redshift/credentials/readwrite'
-export TREE_SPECIES='REDSHIFT'
+export TREE_SPECIES='s3'
 ```
 
-Options are 'REDSHIFT', 'MEMORY'.
+Options are 's3', 'MEMORY'.
 
 ### Scurry (fetch) data
 
