@@ -13,9 +13,6 @@
 
 ```bash
 pip install zombie-squirrel
-
-```bash
-uv sync
 ```
 
 ## Usage
