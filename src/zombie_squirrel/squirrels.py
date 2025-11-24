@@ -144,6 +144,7 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
         "acquisition.acquisition_end_time",
         "processing.data_processes.start_date_time",
         "subject.subject_details.genotype",
+        "other_identifiers",
         "location",
     ]
 
@@ -159,6 +160,7 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
                 "subject_id",
                 "acquisition_start_time",
                 "acquisition_end_time",
+                "code_ocean",
                 "process_date",
                 "genotype",
                 "location",
@@ -212,6 +214,9 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
             else:
                 process_date = None
 
+            # Get the CO asset ID
+            code_ocean = record.get("other_identifiers", {}).get("Code Ocean", None)
+
             flat_record = {
                 "_id": record["_id"],
                 "_last_modified": record.get("_last_modified", None),
@@ -221,6 +226,7 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
                 "subject_id": record.get("subject", {}).get("subject_id", None),
                 "acquisition_start_time": record.get("acquisition", {}).get("acquisition_start_time", None),
                 "acquisition_end_time": record.get("acquisition", {}).get("acquisition_end_time", None),
+                "code_ocean": code_ocean,
                 "process_date": process_date,
                 "genotype": record.get("subject", {}).get("subject_details", {}).get("genotype", None),
                 "location": record.get("location", None),
