@@ -215,7 +215,11 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
                 process_date = None
 
             # Get the CO asset ID
-            code_ocean = record.get("other_identifiers", {}).get("Code Ocean", None)
+            other_identifiers = record.get("other_identifiers", {})
+            if other_identifiers:
+                code_ocean = other_identifiers.get("Code Ocean", None)
+            else:
+                code_ocean = None
 
             flat_record = {
                 "_id": record["_id"],
