@@ -3,6 +3,6 @@ message: "If you use this software, please cite it as below."
 authors:
 - given-names: "Allen Institute for Neural Dynamics"
 title: "zombie-squirrel"
-version: "v0.6.1"
+version: "v0.7.0"
 date-release: 2025-09-29
 url: "https://github.com/AllenNeuralDynamics/zombie-squirrel"
