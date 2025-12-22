@@ -18,7 +18,7 @@ dynamic = ["version"]
 
 dependencies = [
     'duckdb',
-    'fastparquet<2025',
+    'fastparquet<2026',
     'boto3',
     'pandas',
     'aind-data-access-api[docdb]',
