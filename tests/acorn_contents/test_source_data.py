@@ -6,8 +6,6 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 
 from zombie_squirrel.acorn_contents.source_data import source_data
-from zombie_squirrel.forest import MemoryTree
-import zombie_squirrel.acorns as acorns
 
 
 class TestSourceData(unittest.TestCase):

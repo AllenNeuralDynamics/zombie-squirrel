@@ -6,8 +6,6 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 
 from zombie_squirrel.acorn_contents.raw_to_derived import raw_to_derived
-from zombie_squirrel.forest import MemoryTree
-import zombie_squirrel.acorns as acorns
 
 
 class TestRawToDerived(unittest.TestCase):
