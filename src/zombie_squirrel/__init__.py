@@ -5,10 +5,8 @@ metadata from the AIND metadata database with support for multiple backends."""
 
 __version__ = "0.8.0"
 
-from zombie_squirrel.acorns import (  # noqa: F401
-    asset_basics,
-    raw_to_derived,
-    source_data,
-    unique_project_names,
-    unique_subject_ids,
-)
+from zombie_squirrel.acorn_contents.asset_basics import asset_basics  # noqa: F401
+from zombie_squirrel.acorn_contents.raw_to_derived import raw_to_derived  # noqa: F401
+from zombie_squirrel.acorn_contents.source_data import source_data  # noqa: F401
+from zombie_squirrel.acorn_contents.unique_project_names import unique_project_names  # noqa: F401
+from zombie_squirrel.acorn_contents.unique_subject_ids import unique_subject_ids  # noqa: F401
