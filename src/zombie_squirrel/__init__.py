@@ -5,7 +5,7 @@ metadata from the AIND metadata database with support for multiple backends."""
 
 __version__ = "0.7.4"
 
-from zombie_squirrel.squirrels import (  # noqa: F401
+from zombie_squirrel.acorns import (  # noqa: F401
     asset_basics,
     raw_to_derived,
     source_data,

@@ -1,183 +1,515 @@
 """Unit tests for zombie_squirrel.acorns module.
 
-Tests for abstract base class, memory backend, and S3 backend
-for caching functionality."""
+Tests for acorn functions, caching, and registry mechanism."""
 
 import unittest
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
+from zombie_squirrel.forest import MemoryTree
 from zombie_squirrel.acorns import (
-    Acorn,
-    MemoryAcorn,
-    S3Acorn,
+    NAMES,
+    ACORN_REGISTRY,
+    asset_basics,
+    raw_to_derived,
+    source_data,
+    unique_project_names,
+    unique_subject_ids,
 )
 
 
-class TestAcornAbstractClass(unittest.TestCase):
-    """Tests for Acorn abstract base class."""
+class TestAcornRegistration(unittest.TestCase):
+    """Tests for acorn registration mechanism."""
 
-    def test_acorn_cannot_be_instantiated(self):
-        """Test that Acorn abstract class cannot be instantiated."""
-        with self.assertRaises(TypeError):
-            Acorn()
+    def test_acorn_registry_contains_all_functions(self):
+        """Test that all acorn functions are registered."""
+        self.assertIn(NAMES["upn"], ACORN_REGISTRY)
+        self.assertIn(NAMES["usi"], ACORN_REGISTRY)
+        self.assertIn(NAMES["basics"], ACORN_REGISTRY)
+        self.assertIn(NAMES["d2r"], ACORN_REGISTRY)
+        self.assertIn(NAMES["r2d"], ACORN_REGISTRY)
 
-    def test_acorn_subclass_must_implement_hide(self):
-        """Test that subclasses must implement hide method."""
+    def test_registry_values_are_callable(self):
+        """Test that registry values are callable functions."""
+        for name, func in ACORN_REGISTRY.items():
+            self.assertTrue(callable(func), f"{name} is not callable")
 
-        class IncompleteAcorn(Acorn):
-            """Incomplete Acorn subclass missing hide method."""
-
-            def scurry(self, table_name: str) -> pd.DataFrame:  # pragma: no cover
-                """Fetch records from the cache."""
-                return pd.DataFrame()
-
-        with self.assertRaises(TypeError):
-            IncompleteAcorn()
-
-    def test_acorn_subclass_must_implement_scurry(self):
-        """Test that subclasses must implement scurry method."""
-
-        class IncompleteAcorn(Acorn):
-            """Incomplete Acorn subclass missing scurry method."""
-
-            def hide(self, table_name: str, data: pd.DataFrame) -> None:  # pragma: no cover
-                """Store records in the cache."""
-                pass
-
-        with self.assertRaises(TypeError):
-            IncompleteAcorn()
+    def test_names_dict_completeness(self):
+        """Test that NAMES dict has expected keys."""
+        expected_keys = ["upn", "usi", "basics", "d2r", "r2d"]
+        for key in expected_keys:
+            self.assertIn(key, NAMES)
 
 
-class TestMemoryAcorn(unittest.TestCase):
-    """Tests for MemoryAcorn implementation."""
+class TestUniqueProjectNames(unittest.TestCase):
+    """Tests for unique_project_names acorn."""
 
-    def setUp(self):
-        """Initialize a fresh MemoryAcorn for each test."""
-        self.acorn = MemoryAcorn()
+    @patch("zombie_squirrel.acorns.TREE", new_callable=MemoryTree)
+    @patch("zombie_squirrel.acorns.MetadataDbClient")
+    def test_unique_project_names_cache_hit(self, mock_client_class, mock_tree):
+        """Test returning cached project names."""
+        cached_df = pd.DataFrame({"project_name": ["proj1", "proj2", "proj3"]})
+        mock_tree.hide(NAMES["upn"], cached_df)
 
-    def test_hide_and_scurry_basic(self):
-        """Test basic hide and scurry operations."""
-        df = pd.DataFrame({"col1": [1, 2, 3], "col2": ["a", "b", "c"]})
-        self.acorn.hide("test_table", df)
+        result = unique_project_names()
 
-        retrieved = self.acorn.scurry("test_table")
-        pd.testing.assert_frame_equal(df, retrieved)
+        self.assertEqual(result, ["proj1", "proj2", "proj3"])
+        mock_client_class.assert_not_called()
 
-    def test_scurry_empty_table(self):
-        """Test scurrying a table that doesn't exist returns empty DataFrame."""
-        result = self.acorn.scurry("nonexistent_table")
-        self.assertTrue(result.empty)
-        self.assertIsInstance(result, pd.DataFrame)
+    @patch("zombie_squirrel.acorns.TREE", new_callable=MemoryTree)
+    @patch("zombie_squirrel.acorns.MetadataDbClient")
+    def test_unique_project_names_cache_miss(self, mock_client_class, mock_tree):
+        """Test fetching project names when cache is empty."""
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+        mock_client_instance.aggregate_docdb_records.return_value = [
+            {"project_name": "proj1"},
+            {"project_name": "proj2"},
+        ]
 
-    def test_hide_overwrites_existing(self):
-        """Test that hiding data overwrites existing data."""
-        df1 = pd.DataFrame({"col1": [1, 2, 3]})
-        df2 = pd.DataFrame({"col1": [4, 5, 6]})
+        result = unique_project_names()
 
-        self.acorn.hide("table", df1)
-        self.acorn.hide("table", df2)
+        self.assertEqual(result, ["proj1", "proj2"])
+        mock_client_class.assert_called_once()
+        mock_client_instance.aggregate_docdb_records.assert_called_once()
 
-        retrieved = self.acorn.scurry("table")
-        pd.testing.assert_frame_equal(df2, retrieved)
+    @patch("zombie_squirrel.acorns.TREE", new_callable=MemoryTree)
+    @patch("zombie_squirrel.acorns.MetadataDbClient")
+    def test_unique_project_names_force_update(self, mock_client_class, mock_tree):
+        """Test force_update bypasses cache."""
+        cached_df = pd.DataFrame({"project_name": ["old_proj"]})
+        mock_tree.hide(NAMES["upn"], cached_df)
 
-    def test_multiple_tables(self):
-        """Test managing multiple tables."""
-        df1 = pd.DataFrame({"col1": [1, 2]})
-        df2 = pd.DataFrame({"col2": ["a", "b"]})
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+        mock_client_instance.aggregate_docdb_records.return_value = [{"project_name": "new_proj"}]
 
-        self.acorn.hide("table1", df1)
-        self.acorn.hide("table2", df2)
+        result = unique_project_names(force_update=True)
 
-        retrieved1 = self.acorn.scurry("table1")
-        retrieved2 = self.acorn.scurry("table2")
-
-        pd.testing.assert_frame_equal(df1, retrieved1)
-        pd.testing.assert_frame_equal(df2, retrieved2)
-
-    def test_hide_empty_dataframe(self):
-        """Test hiding an empty DataFrame."""
-        df = pd.DataFrame()
-        self.acorn.hide("empty_table", df)
-
-        retrieved = self.acorn.scurry("empty_table")
-        pd.testing.assert_frame_equal(df, retrieved)
+        self.assertEqual(result, ["new_proj"])
+        mock_client_instance.aggregate_docdb_records.assert_called_once()
 
 
-class TestS3Acorn(unittest.TestCase):
-    """Tests for S3Acorn implementation with mocking."""
+class TestUniqueSubjectIds(unittest.TestCase):
+    """Tests for unique_subject_ids squirrel."""
 
-    @patch("zombie_squirrel.acorns.boto3.client")
-    def test_s3_acorn_initialization(self, mock_boto3_client):
-        """Test S3Acorn initialization."""
-        mock_s3_client = MagicMock()
-        mock_boto3_client.return_value = mock_s3_client
+    @patch("zombie_squirrel.acorns.TREE", new_callable=MemoryTree)
+    @patch("zombie_squirrel.acorns.MetadataDbClient")
+    def test_unique_subject_ids_cache_hit(self, mock_client_class, mock_tree):
+        """Test returning cached subject IDs."""
+        cached_df = pd.DataFrame({"subject_id": ["sub001", "sub002"]})
+        mock_tree.hide(NAMES["usi"], cached_df)
 
-        acorn = S3Acorn()
+        result = unique_subject_ids()
 
-        self.assertEqual(acorn.bucket, "aind-scratch-data")
-        self.assertEqual(acorn.s3_client, mock_s3_client)
-        mock_boto3_client.assert_called_once_with("s3")
+        self.assertEqual(result, ["sub001", "sub002"])
+        mock_client_class.assert_not_called()
 
-    @patch("zombie_squirrel.acorns.boto3.client")
-    def test_s3_hide(self, mock_boto3_client):
-        """Test S3Acorn.hide method writes to S3."""
-        mock_s3_client = MagicMock()
-        mock_boto3_client.return_value = mock_s3_client
+    @patch("zombie_squirrel.acorns.TREE", new_callable=MemoryTree)
+    @patch("zombie_squirrel.acorns.MetadataDbClient")
+    def test_unique_subject_ids_cache_miss(self, mock_client_class, mock_tree):
+        """Test fetching subject IDs when cache is empty."""
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+        mock_client_instance.aggregate_docdb_records.return_value = [
+            {"subject_id": "sub001"},
+            {"subject_id": "sub002"},
+        ]
 
-        acorn = S3Acorn()
-        df = pd.DataFrame({"col1": [1, 2, 3]})
+        result = unique_subject_ids()
 
-        acorn.hide("test_table", df)
+        self.assertEqual(result, ["sub001", "sub002"])
+        mock_client_class.assert_called_once()
 
-        mock_s3_client.put_object.assert_called_once()
-        call_kwargs = mock_s3_client.put_object.call_args[1]
-        self.assertEqual(call_kwargs["Bucket"], "aind-scratch-data")
-        self.assertEqual(
-            call_kwargs["Key"], "application-caches/zs_test_table.pqt"
+    @patch("zombie_squirrel.acorns.TREE", new_callable=MemoryTree)
+    @patch("zombie_squirrel.acorns.MetadataDbClient")
+    def test_unique_subject_ids_force_update(self, mock_client_class, mock_tree):
+        """Test force_update bypasses cache."""
+        cached_df = pd.DataFrame({"subject_id": ["old_sub"]})
+        mock_tree.hide(NAMES["usi"], cached_df)
+
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+        mock_client_instance.aggregate_docdb_records.return_value = [{"subject_id": "new_sub"}]
+
+        result = unique_subject_ids(force_update=True)
+
+        self.assertEqual(result, ["new_sub"])
+
+
+class TestAssetBasics(unittest.TestCase):
+    """Tests for asset_basics squirrel."""
+
+    @patch("zombie_squirrel.acorns.TREE", new_callable=MemoryTree)
+    @patch("zombie_squirrel.acorns.MetadataDbClient")
+    def test_asset_basics_cache_hit(self, mock_client_class, mock_tree):
+        """Test returning cached asset basics."""
+        cached_df = pd.DataFrame(
+            {
+                "_id": ["id1", "id2"],
+                "_last_modified": ["2023-01-01", "2023-01-02"],
+                "modalities": ["imaging", "electrophysiology"],
+                "project_name": ["proj1", "proj2"],
+                "data_level": ["raw", "derived"],
+                "subject_id": ["sub001", "sub002"],
+                "acquisition_start_time": [
+                    "2023-01-01T10:00:00",
+                    "2023-01-02T10:00:00",
+                ],
+                "acquisition_end_time": [
+                    "2023-01-01T11:00:00",
+                    "2023-01-02T11:00:00",
+                ],
+            }
         )
-        self.assertIsInstance(call_kwargs["Body"], bytes)
+        mock_tree.hide(NAMES["basics"], cached_df)
 
-    @patch("zombie_squirrel.acorns.duckdb.query")
-    @patch("zombie_squirrel.acorns.boto3.client")
-    def test_s3_scurry(self, mock_boto3_client, mock_duckdb_query):
-        """Test S3Acorn.scurry method reads from S3 using DuckDB."""
-        mock_s3_client = MagicMock()
-        mock_boto3_client.return_value = mock_s3_client
+        result = asset_basics()
 
-        expected_df = pd.DataFrame({"col1": [1, 2, 3]})
-        mock_result = MagicMock()
-        mock_result.to_df.return_value = expected_df
-        mock_duckdb_query.return_value = mock_result
+        self.assertEqual(len(result), 2)
+        self.assertListEqual(list(result["_id"]), ["id1", "id2"])
+        mock_client_class.assert_not_called()
 
-        acorn = S3Acorn()
-        result = acorn.scurry("test_table")
+    @patch("zombie_squirrel.acorns.TREE", new_callable=MemoryTree)
+    @patch("zombie_squirrel.acorns.MetadataDbClient")
+    def test_asset_basics_cache_miss(self, mock_client_class, mock_tree):
+        """Test fetching asset basics when cache is empty."""
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
 
-        # Verify DuckDB was called with correct S3 path
-        mock_duckdb_query.assert_called_once()
-        query_call = mock_duckdb_query.call_args[0][0]
-        self.assertIn(
-            "s3://aind-scratch-data/application-caches/zs_test_table.pqt",
-            query_call,
-        )
-        pd.testing.assert_frame_equal(result, expected_df)
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "id1",
+                "_last_modified": "2023-01-01",
+                "data_description": {
+                    "modalities": [{"abbreviation": "img"}],
+                    "project_name": "proj1",
+                    "data_level": "raw",
+                },
+                "subject": {"subject_id": "sub001"},
+                "acquisition": {
+                    "acquisition_start_time": "2023-01-01T10:00:00",
+                    "acquisition_end_time": "2023-01-01T11:00:00",
+                },
+            }
+        ]
 
-    @patch("zombie_squirrel.acorns.duckdb.query")
-    @patch("zombie_squirrel.acorns.boto3.client")
-    def test_s3_scurry_handles_error(
-        self, mock_boto3_client, mock_duckdb_query
+        result = asset_basics()
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result.iloc[0]["_id"], "id1")
+        self.assertEqual(result.iloc[0]["modalities"], "img")
+        self.assertEqual(result.iloc[0]["project_name"], "proj1")
+
+    @patch("zombie_squirrel.acorns.TREE", new_callable=MemoryTree)
+    @patch("zombie_squirrel.acorns.MetadataDbClient")
+    def test_asset_basics_with_data_processes(
+        self, mock_client_class, mock_tree
     ):
-        """Test S3Acorn.scurry returns empty DataFrame on error."""
-        mock_s3_client = MagicMock()
-        mock_boto3_client.return_value = mock_s3_client
-        mock_duckdb_query.side_effect = Exception("S3 access error")
+        """Test asset_basics includes process_date from data_processes."""
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
 
-        acorn = S3Acorn()
-        result = acorn.scurry("nonexistent_table")
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "id1",
+                "_last_modified": "2023-01-01",
+                "data_description": {
+                    "modalities": [{"abbreviation": "img"}],
+                    "project_name": "proj1",
+                    "data_level": "raw",
+                },
+                "subject": {"subject_id": "sub001"},
+                "acquisition": {
+                    "acquisition_start_time": "2023-01-01T10:00:00",
+                    "acquisition_end_time": "2023-01-01T11:00:00",
+                },
+                "processing": {
+                    "data_processes": [
+                        {"start_date_time": "2023-01-15T14:30:00"},
+                        {"start_date_time": "2023-01-20T09:15:00"},
+                    ]
+                },
+            }
+        ]
 
-        self.assertTrue(result.empty)
-        self.assertIsInstance(result, pd.DataFrame)
+        result = asset_basics()
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result.iloc[0]["_id"], "id1")
+        self.assertEqual(result.iloc[0]["process_date"], "2023-01-20")
+
+    @patch("zombie_squirrel.acorns.TREE", new_callable=MemoryTree)
+    @patch("zombie_squirrel.acorns.MetadataDbClient")
+    def test_asset_basics_incremental_update(
+        self, mock_client_class, mock_tree
+    ):
+        """Test incremental cache update with partial data refresh."""
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+
+        mock_client_instance.retrieve_docdb_records.side_effect = [
+            [
+                {"_id": "id1", "_last_modified": "2023-01-01"},
+                {"_id": "id2", "_last_modified": "2023-01-02"},
+            ],  # First call: shows id2 is new
+            [
+                {
+                    "_id": "id2",
+                    "_last_modified": "2023-01-02",
+                    "data_description": {
+                        "modalities": [{"abbreviation": "elec"}],
+                        "project_name": "proj2",
+                        "data_level": "derived",
+                    },
+                    "subject": {"subject_id": "sub002"},
+                    "acquisition": {
+                        "acquisition_start_time": "2023-01-02T10:00:00",
+                        "acquisition_end_time": "2023-01-02T11:00:00",
+                    },
+                }
+            ],  # Second call: batch fetch for new record
+        ]
+
+        result = asset_basics()
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result.iloc[0]["_id"], "id2")
+
+    @patch("zombie_squirrel.acorns.TREE", new_callable=MemoryTree)
+    @patch("zombie_squirrel.acorns.MetadataDbClient")
+    def test_asset_basics_with_other_identifiers_no_code_ocean(
+        self, mock_client_class, mock_tree
+    ):
+        """Test asset_basics when other_identifiers exists but has no Code Ocean."""
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "id1",
+                "_last_modified": "2023-01-01",
+                "data_description": {
+                    "modalities": [{"abbreviation": "img"}],
+                    "project_name": "proj1",
+                    "data_level": "raw",
+                },
+                "subject": {"subject_id": "sub001"},
+                "acquisition": {
+                    "acquisition_start_time": "2023-01-01T10:00:00",
+                    "acquisition_end_time": "2023-01-01T11:00:00",
+                },
+                "other_identifiers": {"Some Other Field": "value123"},
+            }
+        ]
+
+        result = asset_basics()
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result.iloc[0]["_id"], "id1")
+        self.assertIsNone(result.iloc[0]["code_ocean"])
+
+    @patch("zombie_squirrel.acorns.TREE", new_callable=MemoryTree)
+    @patch("zombie_squirrel.acorns.MetadataDbClient")
+    def test_asset_basics_with_code_ocean_identifier(
+        self, mock_client_class, mock_tree
+    ):
+        """Test asset_basics when other_identifiers contains Code Ocean."""
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "id1",
+                "_last_modified": "2023-01-01",
+                "data_description": {
+                    "modalities": [{"abbreviation": "img"}],
+                    "project_name": "proj1",
+                    "data_level": "raw",
+                },
+                "subject": {"subject_id": "sub001"},
+                "acquisition": {
+                    "acquisition_start_time": "2023-01-01T10:00:00",
+                    "acquisition_end_time": "2023-01-01T11:00:00",
+                },
+                "other_identifiers": {
+                    "Code Ocean": ["df429003-91a0-45d2-8457-66b156ad8bfa"]
+                },
+            }
+        ]
+
+        result = asset_basics()
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result.iloc[0]["_id"], "id1")
+        self.assertEqual(
+            result.iloc[0]["code_ocean"], ["df429003-91a0-45d2-8457-66b156ad8bfa"]
+        )
+
+
+class TestSourceData(unittest.TestCase):
+    """Tests for source_data squirrel."""
+
+    @patch("zombie_squirrel.acorns.TREE", new_callable=MemoryTree)
+    @patch("zombie_squirrel.acorns.MetadataDbClient")
+    def test_source_data_cache_hit(self, mock_client_class, mock_tree):
+        """Test returning cached source data."""
+        cached_df = pd.DataFrame(
+            {
+                "_id": ["id1", "id2"],
+                "source_data": ["source1, source2", "source3"],
+            }
+        )
+        mock_tree.hide(NAMES["d2r"], cached_df)
+
+        result = source_data()
+
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result.iloc[0]["source_data"], "source1, source2")
+        mock_client_class.assert_not_called()
+
+    @patch("zombie_squirrel.acorns.TREE", new_callable=MemoryTree)
+    @patch("zombie_squirrel.acorns.MetadataDbClient")
+    def test_source_data_cache_miss(self, mock_client_class, mock_tree):
+        """Test fetching source data when cache is empty."""
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "id1",
+                "data_description": {"source_data": ["src1", "src2"]},
+            },
+            {"_id": "id2", "data_description": {"source_data": []}},
+        ]
+
+        result = source_data()
+
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result.iloc[0]["source_data"], "src1, src2")
+        self.assertEqual(result.iloc[1]["source_data"], "")
+
+    @patch("zombie_squirrel.acorns.TREE", new_callable=MemoryTree)
+    @patch("zombie_squirrel.acorns.MetadataDbClient")
+    def test_source_data_force_update(self, mock_client_class, mock_tree):
+        """Test force_update bypasses cache."""
+        cached_df = pd.DataFrame(
+            {
+                "_id": ["old_id"],
+                "source_data": ["old_source"],
+            }
+        )
+        mock_tree.hide(NAMES["d2r"], cached_df)
+
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "new_id",
+                "data_description": {"source_data": ["new_src"]},
+            },
+        ]
+
+        result = source_data(force_update=True)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result.iloc[0]["_id"], "new_id")
+
+
+class TestRawToDerived(unittest.TestCase):
+    """Tests for raw_to_derived squirrel."""
+
+    @patch("zombie_squirrel.acorns.TREE", new_callable=MemoryTree)
+    @patch("zombie_squirrel.acorns.MetadataDbClient")
+    def test_raw_to_derived_cache_hit(self, mock_client_class, mock_tree):
+        """Test returning cached raw to derived mapping."""
+        cached_df = pd.DataFrame(
+            {
+                "_id": ["raw1", "raw2"],
+                "derived_records": ["derived1, derived2", "derived3"],
+            }
+        )
+        mock_tree.hide(NAMES["r2d"], cached_df)
+
+        result = raw_to_derived()
+
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result.iloc[0]["derived_records"], "derived1, derived2")
+        mock_client_class.assert_not_called()
+
+    @patch("zombie_squirrel.acorns.TREE", new_callable=MemoryTree)
+    @patch("zombie_squirrel.acorns.MetadataDbClient")
+    def test_raw_to_derived_cache_miss(self, mock_client_class, mock_tree):
+        """Test fetching raw to derived mapping when cache is empty."""
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+
+        # Mock raw and derived records
+        mock_client_instance.retrieve_docdb_records.side_effect = [
+            [
+                {"_id": "raw1"},
+                {"_id": "raw2"},
+            ],  # First call: raw records
+            [
+                {
+                    "_id": "derived1",
+                    "data_description": {"source_data": ["raw1"]},
+                },
+                {
+                    "_id": "derived2",
+                    "data_description": {"source_data": ["raw1", "raw2"]},
+                },
+            ],  # Second call: derived records
+        ]
+
+        result = raw_to_derived()
+
+        self.assertEqual(len(result), 2)
+        raw1_row = result[result["_id"] == "raw1"]
+        raw2_row = result[result["_id"] == "raw2"]
+        self.assertEqual(raw1_row.iloc[0]["derived_records"], "derived1, derived2")
+        self.assertEqual(raw2_row.iloc[0]["derived_records"], "derived2")
+
+    @patch("zombie_squirrel.acorns.TREE", new_callable=MemoryTree)
+    @patch("zombie_squirrel.acorns.MetadataDbClient")
+    def test_raw_to_derived_no_derived(self, mock_client_class, mock_tree):
+        """Test raw records with no derived data."""
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+
+        mock_client_instance.retrieve_docdb_records.side_effect = [
+            [{"_id": "raw1"}],  # Raw records
+            [],  # No derived records
+        ]
+
+        result = raw_to_derived()
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result.iloc[0]["derived_records"], "")
+
+    @patch("zombie_squirrel.acorns.TREE", new_callable=MemoryTree)
+    @patch("zombie_squirrel.acorns.MetadataDbClient")
+    def test_raw_to_derived_force_update(self, mock_client_class, mock_tree):
+        """Test force_update bypasses cache."""
+        cached_df = pd.DataFrame(
+            {
+                "_id": ["old_raw"],
+                "derived_records": ["old_derived"],
+            }
+        )
+        mock_tree.hide(NAMES["r2d"], cached_df)
+
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+        mock_client_instance.retrieve_docdb_records.side_effect = [
+            [{"_id": "new_raw"}],
+            [],
+        ]
+
+        result = raw_to_derived(force_update=True)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result.iloc[0]["_id"], "new_raw")
 
 
 if __name__ == "__main__":

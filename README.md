@@ -20,10 +20,10 @@ pip install zombie-squirrel
 ### Set backend
 
 ```bash
-export TREE_SPECIES='s3'
+export FOREST_TYPE='S3'
 ```
 
-Options are 's3', 'MEMORY'.
+Options are 'S3', 'MEMORY'.
 
 ### Scurry (fetch) data
 
