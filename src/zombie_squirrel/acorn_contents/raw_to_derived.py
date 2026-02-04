@@ -6,6 +6,7 @@ import pandas as pd
 from aind_data_access_api.document_db import MetadataDbClient
 
 import zombie_squirrel.acorns as acorns
+from zombie_squirrel.utils import setup_logging
 
 
 @acorns.register_acorn(acorns.NAMES["r2d"])
@@ -28,6 +29,7 @@ def raw_to_derived(force_update: bool = False) -> pd.DataFrame:
         )
 
     if df.empty or force_update:
+        setup_logging()
         logging.info("Updating cache for raw to derived mapping")
         client = MetadataDbClient(
             host=acorns.API_GATEWAY_HOST,

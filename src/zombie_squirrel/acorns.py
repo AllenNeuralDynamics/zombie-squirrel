@@ -45,3 +45,14 @@ def register_acorn(name: str):
         return func
 
     return decorator
+
+
+# Import acorn_contents modules to trigger registration
+# This must be done after the registry and decorator are defined
+from zombie_squirrel.acorn_contents import (  # noqa: E402, F401
+    asset_basics,
+    raw_to_derived,
+    source_data,
+    unique_project_names,
+    unique_subject_ids,
+)

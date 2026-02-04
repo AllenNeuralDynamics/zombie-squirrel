@@ -6,6 +6,7 @@ import pandas as pd
 from aind_data_access_api.document_db import MetadataDbClient
 
 import zombie_squirrel.acorns as acorns
+from zombie_squirrel.utils import setup_logging
 
 
 @acorns.register_acorn(acorns.NAMES["d2r"])
@@ -28,6 +29,7 @@ def source_data(force_update: bool = False) -> pd.DataFrame:
         )
 
     if df.empty or force_update:
+        setup_logging()
         logging.info("Updating cache for source data")
         client = MetadataDbClient(
             host=acorns.API_GATEWAY_HOST,

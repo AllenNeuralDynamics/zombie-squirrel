@@ -6,6 +6,7 @@ import pandas as pd
 from aind_data_access_api.document_db import MetadataDbClient
 
 import zombie_squirrel.acorns as acorns
+from zombie_squirrel.utils import setup_logging
 
 
 @acorns.register_acorn(acorns.NAMES["upn"])
@@ -28,7 +29,7 @@ def unique_project_names(force_update: bool = False) -> list[str]:
         )
 
     if df.empty or force_update:
-        # If cache is missing, fetch data
+        setup_logging()
         logging.info("Updating cache for unique project names")
         client = MetadataDbClient(
             host=acorns.API_GATEWAY_HOST,
