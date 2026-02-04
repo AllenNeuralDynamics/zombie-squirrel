@@ -16,12 +16,14 @@ API_GATEWAY_HOST = "api.allenneuraldynamics.org"
 
 forest_type = os.getenv("FOREST_TYPE", "memory").lower()
 
-if forest_type == "S3":  # pragma: no cover
+if forest_type == "s3":  # pragma: no cover
     logging.info("Using S3 forest for caching")
     TREE = S3Tree()
-else:
+elif forest_type == "memory":
     logging.info("Using in-memory forest for caching")
     TREE = MemoryTree()
+else:
+    raise ValueError(f"Unknown FOREST_TYPE: {forest_type}")
 
 # --- Acorn registry and names -----------------------------------------------------
 
@@ -45,14 +47,3 @@ def register_acorn(name: str):
         return func
 
     return decorator
-
-
-# Import acorn_contents modules to trigger registration
-# This must be done after the registry and decorator are defined
-from zombie_squirrel.acorn_contents import (  # noqa: E402, F401
-    asset_basics,
-    raw_to_derived,
-    source_data,
-    unique_project_names,
-    unique_subject_ids,
-)

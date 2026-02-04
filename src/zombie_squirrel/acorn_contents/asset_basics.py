@@ -6,7 +6,7 @@ import pandas as pd
 from aind_data_access_api.document_db import MetadataDbClient
 
 import zombie_squirrel.acorns as acorns
-from zombie_squirrel.utils import setup_logging
+from zombie_squirrel.utils import setup_logging, SquirrelMessage
 
 
 @acorns.register_acorn(acorns.NAMES["basics"])
@@ -45,7 +45,11 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
 
     if df.empty or force_update:
         setup_logging()
-        logging.info("Updating cache for asset basics")
+        logging.info(SquirrelMessage(
+            tree=acorns.TREE.__class__.__name__,
+            acorn=acorns.NAMES["basics"],
+            message="Updating cache"
+        ).to_json())
         df = pd.DataFrame(
             columns=[
                 "_id",
@@ -85,7 +89,11 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
         BATCH_SIZE = 100
         asset_records = []
         for i in range(0, len(keep_ids), BATCH_SIZE):
-            logging.info(f"Fetching asset basics batch {i // BATCH_SIZE + 1}...")
+            logging.info(SquirrelMessage(
+                tree=acorns.TREE.__class__.__name__,
+                acorn=acorns.NAMES["basics"],
+                message=f"Fetching batch {i // BATCH_SIZE + 1}"
+            ).to_json())
             batch_ids = keep_ids[i: i + BATCH_SIZE]
             batch_records = client.retrieve_docdb_records(
                 filter_query={"_id": {"$in": batch_ids}},

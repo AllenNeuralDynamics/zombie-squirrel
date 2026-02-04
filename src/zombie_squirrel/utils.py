@@ -1,6 +1,18 @@
 """Utility functions for zombie-squirrel package."""
 
 import logging
+from pydantic import BaseModel
+
+
+class SquirrelMessage(BaseModel):
+    """Structured logging message for zombie-squirrel operations."""
+    tree: str
+    acorn: str
+    message: str
+
+    def to_json(self) -> str:
+        """Convert message to JSON string."""
+        return self.model_dump_json()
 
 
 def setup_logging():
