@@ -29,6 +29,17 @@ class TestRawToDerived(unittest.TestCase):
         self.assertEqual(result.iloc[0]["derived_records"], "derived1, derived2")
         mock_client_class.assert_not_called()
 
+    @patch("zombie_squirrel.acorn_contents.raw_to_derived.acorns.TREE")
+    def test_raw_to_derived_empty_cache_raises_error(self, mock_tree):
+        """Test that empty cache raises ValueError without force_update."""
+        mock_tree.scurry.return_value = pd.DataFrame()
+
+        with self.assertRaises(ValueError) as context:
+            raw_to_derived(force_update=False)
+
+        self.assertIn("Cache is empty", str(context.exception))
+        self.assertIn("force_update=True", str(context.exception))
+
     @patch("zombie_squirrel.acorn_contents.raw_to_derived.MetadataDbClient")
     @patch("zombie_squirrel.acorn_contents.raw_to_derived.acorns.TREE")
     def test_raw_to_derived_cache_miss(self, mock_tree, mock_client_class):
@@ -55,7 +66,7 @@ class TestRawToDerived(unittest.TestCase):
             ],  # Second call: derived records
         ]
 
-        result = raw_to_derived(force_update=False)
+        result = raw_to_derived(force_update=True)
 
         self.assertEqual(len(result), 2)
         raw1_row = result[result["_id"] == "raw1"]
@@ -76,7 +87,7 @@ class TestRawToDerived(unittest.TestCase):
             [],  # No derived records
         ]
 
-        result = raw_to_derived(force_update=False)
+        result = raw_to_derived(force_update=True)
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result.iloc[0]["derived_records"], "")

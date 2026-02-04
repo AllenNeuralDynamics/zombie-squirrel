@@ -5,7 +5,7 @@ import os
 import sys
 import unittest
 
-os.environ["TREE_SPECIES"] = "memory"
+os.environ["FOREST_SPECIES"] = "memory"
 
 if __name__ == "__main__":
     loader = unittest.TestLoader()

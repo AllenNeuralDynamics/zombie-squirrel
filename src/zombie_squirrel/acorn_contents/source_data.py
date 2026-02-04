@@ -22,6 +22,11 @@ def source_data(force_update: bool = False) -> pd.DataFrame:
         DataFrame with _id and source_data columns."""
     df = acorns.TREE.scurry(acorns.NAMES["d2r"])
 
+    if df.empty and not force_update:
+        raise ValueError(
+            "Cache is empty. Use force_update=True to fetch data from database."
+        )
+
     if df.empty or force_update:
         logging.info("Updating cache for source data")
         client = MetadataDbClient(

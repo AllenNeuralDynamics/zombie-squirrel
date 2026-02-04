@@ -29,6 +29,17 @@ class TestSourceData(unittest.TestCase):
         self.assertEqual(result.iloc[0]["source_data"], "source1, source2")
         mock_client_class.assert_not_called()
 
+    @patch("zombie_squirrel.acorn_contents.source_data.acorns.TREE")
+    def test_source_data_empty_cache_raises_error(self, mock_tree):
+        """Test that empty cache raises ValueError without force_update."""
+        mock_tree.scurry.return_value = pd.DataFrame()
+
+        with self.assertRaises(ValueError) as context:
+            source_data(force_update=False)
+
+        self.assertIn("Cache is empty", str(context.exception))
+        self.assertIn("force_update=True", str(context.exception))
+
     @patch("zombie_squirrel.acorn_contents.source_data.MetadataDbClient")
     @patch("zombie_squirrel.acorn_contents.source_data.acorns.TREE")
     def test_source_data_cache_miss(self, mock_tree, mock_client_class):
@@ -44,7 +55,7 @@ class TestSourceData(unittest.TestCase):
             {"_id": "id2", "data_description": {"source_data": []}},
         ]
 
-        result = source_data(force_update=False)
+        result = source_data(force_update=True)
 
         self.assertEqual(len(result), 2)
         self.assertEqual(result.iloc[0]["source_data"], "src1, src2")

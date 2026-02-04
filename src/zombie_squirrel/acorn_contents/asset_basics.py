@@ -37,6 +37,11 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
         "location",
     ]
 
+    if df.empty and not force_update:
+        raise ValueError(
+            "Cache is empty. Use force_update=True to fetch data from database."
+        )
+
     if df.empty or force_update:
         logging.info("Updating cache for asset basics")
         df = pd.DataFrame(

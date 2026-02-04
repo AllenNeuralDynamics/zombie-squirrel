@@ -25,6 +25,17 @@ class TestUniqueProjectNames(unittest.TestCase):
         self.assertEqual(result, ["proj1", "proj2", "proj3"])
         mock_client_class.assert_not_called()
 
+    @patch("zombie_squirrel.acorn_contents.unique_project_names.acorns.TREE")
+    def test_unique_project_names_empty_cache_raises_error(self, mock_tree):
+        """Test that empty cache raises ValueError without force_update."""
+        mock_tree.scurry.return_value = pd.DataFrame()
+
+        with self.assertRaises(ValueError) as context:
+            unique_project_names(force_update=False)
+
+        self.assertIn("Cache is empty", str(context.exception))
+        self.assertIn("force_update=True", str(context.exception))
+
     @patch("zombie_squirrel.acorn_contents.unique_project_names.MetadataDbClient")
     @patch("zombie_squirrel.acorn_contents.unique_project_names.acorns.TREE")
     def test_unique_project_names_cache_miss(self, mock_tree, mock_client_class):
@@ -37,7 +48,7 @@ class TestUniqueProjectNames(unittest.TestCase):
             {"project_name": "proj2"},
         ]
 
-        result = unique_project_names(force_update=False)
+        result = unique_project_names(force_update=True)
 
         self.assertEqual(result, ["proj1", "proj2"])
         mock_client_class.assert_called_once()

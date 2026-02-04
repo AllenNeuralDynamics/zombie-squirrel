@@ -41,6 +41,17 @@ class TestAssetBasics(unittest.TestCase):
         self.assertListEqual(list(result["_id"]), ["id1", "id2"])
         mock_client_class.assert_not_called()
 
+    @patch("zombie_squirrel.acorn_contents.asset_basics.acorns.TREE")
+    def test_asset_basics_empty_cache_raises_error(self, mock_tree):
+        """Test that empty cache raises ValueError without force_update."""
+        mock_tree.scurry.return_value = pd.DataFrame()
+
+        with self.assertRaises(ValueError) as context:
+            asset_basics(force_update=False)
+
+        self.assertIn("Cache is empty", str(context.exception))
+        self.assertIn("force_update=True", str(context.exception))
+
     @patch("zombie_squirrel.acorn_contents.asset_basics.MetadataDbClient")
     @patch("zombie_squirrel.acorn_contents.asset_basics.acorns.TREE")
     def test_asset_basics_cache_miss(self, mock_tree, mock_client_class):
@@ -66,7 +77,7 @@ class TestAssetBasics(unittest.TestCase):
             }
         ]
 
-        result = asset_basics(force_update=False)
+        result = asset_basics(force_update=True)
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result.iloc[0]["_id"], "id1")
@@ -104,7 +115,7 @@ class TestAssetBasics(unittest.TestCase):
             }
         ]
 
-        result = asset_basics(force_update=False)
+        result = asset_basics(force_update=True)
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result.iloc[0]["_id"], "id1")
@@ -141,7 +152,7 @@ class TestAssetBasics(unittest.TestCase):
             ],  # Second call: batch fetch for new record
         ]
 
-        result = asset_basics(force_update=False)
+        result = asset_basics(force_update=True)
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result.iloc[0]["_id"], "id2")
@@ -172,7 +183,7 @@ class TestAssetBasics(unittest.TestCase):
             }
         ]
 
-        result = asset_basics(force_update=False)
+        result = asset_basics(force_update=True)
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result.iloc[0]["_id"], "id1")
@@ -206,7 +217,7 @@ class TestAssetBasics(unittest.TestCase):
             }
         ]
 
-        result = asset_basics(force_update=False)
+        result = asset_basics(force_update=True)
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result.iloc[0]["_id"], "id1")

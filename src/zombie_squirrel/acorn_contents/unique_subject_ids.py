@@ -22,6 +22,11 @@ def unique_subject_ids(force_update: bool = False) -> list[str]:
         List of unique subject IDs."""
     df = acorns.TREE.scurry(acorns.NAMES["usi"])
 
+    if df.empty and not force_update:
+        raise ValueError(
+            "Cache is empty. Use force_update=True to fetch data from database."
+        )
+
     if df.empty or force_update:
         # If cache is missing, fetch data
         logging.info("Updating cache for unique subject IDs")

@@ -22,6 +22,11 @@ def unique_project_names(force_update: bool = False) -> list[str]:
         List of unique project names."""
     df = acorns.TREE.scurry(acorns.NAMES["upn"])
 
+    if df.empty and not force_update:
+        raise ValueError(
+            "Cache is empty. Use force_update=True to fetch data from database."
+        )
+
     if df.empty or force_update:
         # If cache is missing, fetch data
         logging.info("Updating cache for unique project names")

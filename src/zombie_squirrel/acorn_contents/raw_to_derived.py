@@ -22,6 +22,11 @@ def raw_to_derived(force_update: bool = False) -> pd.DataFrame:
         DataFrame with _id and derived_records columns."""
     df = acorns.TREE.scurry(acorns.NAMES["r2d"])
 
+    if df.empty and not force_update:
+        raise ValueError(
+            "Cache is empty. Use force_update=True to fetch data from database."
+        )
+
     if df.empty or force_update:
         logging.info("Updating cache for raw to derived mapping")
         client = MetadataDbClient(
@@ -50,9 +55,10 @@ def raw_to_derived(force_update: bool = False) -> pd.DataFrame:
             source_data_list = derived_record.get("data_description", {}).get("source_data", [])
             derived_id = derived_record["_id"]
             # Add this derived record to each raw record it depends on
-            for source_id in source_data_list:
-                if source_id in raw_to_derived_map:
-                    raw_to_derived_map[source_id].append(derived_id)
+            if source_data_list:
+                for source_id in source_data_list:
+                    if source_id in raw_to_derived_map:
+                        raw_to_derived_map[source_id].append(derived_id)
 
         # Convert to DataFrame
         data = []
