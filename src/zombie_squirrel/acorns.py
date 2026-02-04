@@ -9,6 +9,7 @@ from zombie_squirrel.forest import (
     MemoryTree,
     S3Tree,
 )
+from zombie_squirrel.utils import SquirrelMessage
 
 # --- Backend setup ---------------------------------------------------
 
@@ -17,10 +18,18 @@ API_GATEWAY_HOST = "api.allenneuraldynamics.org"
 forest_type = os.getenv("FOREST_TYPE", "memory").lower()
 
 if forest_type == "s3":  # pragma: no cover
-    logging.info("Using S3 forest for caching")
+    logging.info(SquirrelMessage(
+        tree="S3Tree",
+        acorn="system",
+        message="Initializing S3 forest for caching"
+    ).to_json())
     TREE = S3Tree()
 elif forest_type == "memory":
-    logging.info("Using in-memory forest for caching")
+    logging.info(SquirrelMessage(
+        tree="MemoryTree",
+        acorn="system",
+        message="Initializing in-memory forest for caching"
+    ).to_json())
     TREE = MemoryTree()
 else:
     raise ValueError(f"Unknown FOREST_TYPE: {forest_type}")

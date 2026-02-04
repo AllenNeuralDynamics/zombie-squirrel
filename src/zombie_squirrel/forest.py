@@ -8,7 +8,7 @@ import boto3
 import duckdb
 import pandas as pd
 
-from zombie_squirrel.utils import get_s3_cache_path, prefix_table_name
+from zombie_squirrel.utils import get_s3_cache_path, prefix_table_name, SquirrelMessage
 
 
 class Tree(ABC):
@@ -53,7 +53,11 @@ class S3Tree(Tree):
             Key=s3_key,
             Body=parquet_buffer.getvalue(),
         )
-        logging.info(f"Stored cache to S3: s3://{self.bucket}/{s3_key}")
+        logging.info(SquirrelMessage(
+            tree="S3Tree",
+            acorn=table_name,
+            message=f"Stored cache to s3://{self.bucket}/{s3_key}"
+        ).to_json())
 
     def scurry(self, table_name: str) -> pd.DataFrame:
         """Fetch DataFrame from S3 parquet file."""
@@ -68,14 +72,18 @@ class S3Tree(Tree):
                 )
             """
             result = duckdb.query(query).to_df()
-            logging.info(
-                f"Retrieved cache from S3: s3://{self.bucket}/{s3_key}"
-            )
+            logging.info(SquirrelMessage(
+                tree="S3Tree",
+                acorn=table_name,
+                message=f"Retrieved cache from s3://{self.bucket}/{s3_key}"
+            ).to_json())
             return result
         except Exception as e:
-            logging.warning(
-                f"Error fetching from cache {s3_key}: {e}"
-            )
+            logging.warning(SquirrelMessage(
+                tree="S3Tree",
+                acorn=table_name,
+                message=f"Error fetching from cache {s3_key}: {e}"
+            ).to_json())
             return pd.DataFrame()
 
 
