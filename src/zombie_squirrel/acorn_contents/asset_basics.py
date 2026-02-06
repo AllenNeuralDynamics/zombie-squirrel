@@ -36,6 +36,7 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
         "subject.subject_details.genotype",
         "other_identifiers",
         "location",
+        "name",
     ]
 
     if df.empty and not force_update:
@@ -64,6 +65,7 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
                 "process_date",
                 "genotype",
                 "location",
+                "name",
             ]
         )
         client = MetadataDbClient(
@@ -138,6 +140,7 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
                 "process_date": process_date,
                 "genotype": record.get("subject", {}).get("subject_details", {}).get("genotype", None),
                 "location": record.get("location", None),
+                "name": record.get("name", None),
             }
             records.append(flat_record)
 
