@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
-from zombie_squirrel.acorn_contents.unique_subject_ids import unique_subject_ids
+from zombie_squirrel.acorn_helpers.unique_subject_ids import unique_subject_ids
 from zombie_squirrel.forest import MemoryTree
 import zombie_squirrel.acorns as acorns
 

@@ -1,6 +1,6 @@
 """Acorns module: individual data fetching functions."""
 
-from zombie_squirrel.acorn_contents import (  # noqa: F401
+from zombie_squirrel.acorn_helpers import (  # noqa: F401
     asset_basics,
     raw_to_derived,
     source_data,

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
-from zombie_squirrel.acorn_contents.raw_to_derived import raw_to_derived
+from zombie_squirrel.acorn_helpers.raw_to_derived import raw_to_derived
 
 
 class TestRawToDerived(unittest.TestCase):

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
-from zombie_squirrel.acorn_contents.asset_basics import asset_basics
+from zombie_squirrel.acorn_helpers.asset_basics import asset_basics
 
 
 class TestAssetBasics(unittest.TestCase):

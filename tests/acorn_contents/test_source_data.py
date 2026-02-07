@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
-from zombie_squirrel.acorn_contents.source_data import source_data
+from zombie_squirrel.acorn_helpers.source_data import source_data
 
 
 class TestSourceData(unittest.TestCase):
