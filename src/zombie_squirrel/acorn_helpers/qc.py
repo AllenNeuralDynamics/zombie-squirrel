@@ -51,9 +51,15 @@ def qc(subject_id: str, asset_names: str | list[str] | None = None, force_update
     df = acorns.TREE.scurry(cache_key)
 
     if df.empty and not force_update:
-        raise ValueError(f"Cache is empty for subject {subject_id}. Use force_update=True to fetch data from database.")
+        logging.error(
+            SquirrelMessage(
+                tree=acorns.TREE.__class__.__name__,
+                acorn=acorns.NAMES["qc"],
+                message=f"Cache is empty for subject {subject_id}. Use force_update=True to fetch data from database.",
+            ).to_json()
+        )
 
-    if df.empty or force_update:
+    if force_update:
         df = _fetch_subject_qc(subject_id)
 
     if asset_names is not None:
@@ -151,9 +157,13 @@ def _filter_by_asset_names(df: pd.DataFrame, asset_names: str | list[str], subje
     missing_assets = [name for name in asset_names if name not in available_assets]
 
     if missing_assets:
-        raise ValueError(
-            f"Asset(s) {missing_assets} not found in cache for subject {subject_id}. "
-            f"Available assets: {available_assets}"
+        logging.warning(
+            SquirrelMessage(
+                tree=acorns.TREE.__class__.__name__,
+                acorn=acorns.NAMES["qc"],
+                message=f"Requested asset(s) {missing_assets} not found in cache for subject {subject_id}. "
+                        f"Available assets: {available_assets}",
+            ).to_json()
         )
 
     return df[df["asset_name"].isin(asset_names)].reset_index(drop=True)
