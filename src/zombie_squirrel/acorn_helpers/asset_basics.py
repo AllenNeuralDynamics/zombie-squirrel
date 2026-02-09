@@ -6,7 +6,7 @@ import pandas as pd
 from aind_data_access_api.document_db import MetadataDbClient
 
 import zombie_squirrel.acorns as acorns
-from zombie_squirrel.utils import setup_logging, SquirrelMessage
+from zombie_squirrel.utils import SquirrelMessage, setup_logging
 
 
 @acorns.register_acorn(acorns.NAMES["basics"])
@@ -40,17 +40,15 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
     ]
 
     if df.empty and not force_update:
-        raise ValueError(
-            "Cache is empty. Use force_update=True to fetch data from database."
-        )
+        raise ValueError("Cache is empty. Use force_update=True to fetch data from database.")
 
     if df.empty or force_update:
         setup_logging()
-        logging.info(SquirrelMessage(
-            tree=acorns.TREE.__class__.__name__,
-            acorn=acorns.NAMES["basics"],
-            message="Updating cache"
-        ).to_json())
+        logging.info(
+            SquirrelMessage(
+                tree=acorns.TREE.__class__.__name__, acorn=acorns.NAMES["basics"], message="Updating cache"
+            ).to_json()
+        )
         df = pd.DataFrame(
             columns=[
                 "_id",
@@ -91,12 +89,14 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
         BATCH_SIZE = 100
         asset_records = []
         for i in range(0, len(keep_ids), BATCH_SIZE):
-            logging.info(SquirrelMessage(
-                tree=acorns.TREE.__class__.__name__,
-                acorn=acorns.NAMES["basics"],
-                message=f"Fetching batch {i // BATCH_SIZE + 1}"
-            ).to_json())
-            batch_ids = keep_ids[i: i + BATCH_SIZE]
+            logging.info(
+                SquirrelMessage(
+                    tree=acorns.TREE.__class__.__name__,
+                    acorn=acorns.NAMES["basics"],
+                    message=f"Fetching batch {i // BATCH_SIZE + 1}",
+                ).to_json()
+            )
+            batch_ids = keep_ids[i : i + BATCH_SIZE]
             batch_records = client.retrieve_docdb_records(
                 filter_query={"_id": {"$in": batch_ids}},
                 projection={field: 1 for field in FIELDS + ["_id", "_last_modified"]},

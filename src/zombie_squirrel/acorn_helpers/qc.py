@@ -2,18 +2,19 @@
 
 import json
 import logging
-from typing import Union
 
 import pandas as pd
 from aind_data_access_api.document_db import MetadataDbClient
 
 import zombie_squirrel.acorns as acorns
-from zombie_squirrel.utils import setup_logging, SquirrelMessage
+from zombie_squirrel.utils import SquirrelMessage, setup_logging
 
 
 def encode_dict_value(value):
-    if isinstance(value, dict):
+    if isinstance(value, (dict, list)):
         return f"json:{json.dumps(value)}"
+    if value is not None and not isinstance(value, str):
+        return str(value)
     return value
 
 
@@ -24,130 +25,135 @@ def decode_dict_value(value):
 
 
 @acorns.register_acorn(acorns.NAMES["qc"])
-def qc(
-    asset_names: Union[str, list[str]], force_update: bool = False
-) -> pd.DataFrame:
-    """Fetch quality control metrics for one or more assets.
+def qc(subject_id: str, asset_names: str | list[str] | None = None, force_update: bool = False) -> pd.DataFrame:
+    """Fetch quality control metrics for assets belonging to a subject.
 
     Returns a DataFrame with columns from the quality_control metrics
     including: name, stage, object_type, modality, value, tags, status,
-    and status_history. Dict values are stored as JSON strings with
-    'json:' prefix for cleaner dataframe storage.
+    status_history, and asset_name. Dict values are stored as JSON strings
+    with 'json:' prefix for cleaner dataframe storage.
 
-    When multiple assets are provided, merges all QC data into a single
-    DataFrame with an 'asset_name' column to differentiate sources.
+    Data is cached per subject_id. All assets for the subject are stored
+    in cache, but can be filtered using the asset_names parameter.
 
     Args:
-        asset_names: Single asset name or list of asset names.
+        subject_id: Subject ID to fetch QC data for (from subject.subject_id field).
+        asset_names: Optional asset name or list of asset names to filter to.
+                    If None, returns QC data for all assets of the subject.
         force_update: If True, bypass cache and fetch fresh data from database.
 
     Returns:
-        DataFrame with quality control metrics for the asset(s)."""
-    if isinstance(asset_names, str):
-        return _qc_single(asset_names, force_update)
-    return _qc_multiple(asset_names, force_update)
+        DataFrame with quality control metrics for the subject's asset(s).
 
-
-def _qc_single(asset_name: str, force_update: bool) -> pd.DataFrame:
-    """Fetch QC data for a single asset."""
-    cache_key = f"qc/{asset_name}"
+    Raises:
+        ValueError: If requested asset_names are not found in the subject's cache."""
+    cache_key = f"qc/{subject_id}"
     df = acorns.TREE.scurry(cache_key)
 
     if df.empty and not force_update:
-        raise ValueError(
-            f"Cache is empty for {asset_name}. "
-            "Use force_update=True to fetch data from database."
-        )
+        raise ValueError(f"Cache is empty for subject {subject_id}. Use force_update=True to fetch data from database.")
 
     if df.empty or force_update:
-        setup_logging()
-        logging.info(SquirrelMessage(
+        df = _fetch_subject_qc(subject_id)
+
+    if asset_names is not None:
+        df = _filter_by_asset_names(df, asset_names, subject_id)
+
+    return df
+
+
+def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
+    """Fetch QC data for all assets belonging to a subject."""
+    setup_logging()
+    cache_key = f"qc/{subject_id}"
+
+    logging.info(
+        SquirrelMessage(
             tree=acorns.TREE.__class__.__name__,
             acorn=acorns.NAMES["qc"],
-            message=f"Updating cache for {asset_name}"
-        ).to_json())
+            message=f"Updating cache for subject {subject_id}",
+        ).to_json()
+    )
 
-        client = MetadataDbClient(
-            host=acorns.API_GATEWAY_HOST,
-            version="v2",
-        )
+    client = MetadataDbClient(
+        host=acorns.API_GATEWAY_HOST,
+        version="v2",
+    )
 
-        records = client.retrieve_docdb_records(
-            filter_query={"name": asset_name},
-            projection={
-                "_id": 1,
-                "name": 1,
-                "quality_control": 1,
-            },
-            limit=1,
-        )
+    records = client.retrieve_docdb_records(
+        filter_query={"subject.subject_id": subject_id},
+        projection={
+            "_id": 1,
+            "name": 1,
+            "quality_control": 1,
+        },
+        limit=100,
+    )
 
-        if not records:
-            logging.warning(SquirrelMessage(
+    if not records:
+        logging.warning(
+            SquirrelMessage(
                 tree=acorns.TREE.__class__.__name__,
                 acorn=acorns.NAMES["qc"],
-                message=f"No record found for {asset_name}"
-            ).to_json())
-            return pd.DataFrame()
+                message=f"No records found for subject {subject_id}",
+            ).to_json()
+        )
+        return pd.DataFrame()
 
-        record = records[0]
+    all_metrics = []
+    for record in records:
+        asset_name = record.get("name", "")
         quality_control = record.get("quality_control", {})
 
         if not quality_control or "metrics" not in quality_control:
-            logging.warning(SquirrelMessage(
-                tree=acorns.TREE.__class__.__name__,
-                acorn=acorns.NAMES["qc"],
-                message=f"No quality_control metrics found for {asset_name}"
-            ).to_json())
-            return pd.DataFrame()
+            continue
 
-        metrics_copy = []
         for metric in quality_control["metrics"]:
             metric_copy = metric.copy()
-            metric_copy["value"] = encode_dict_value(metric_copy.get("value"))
-            metric_copy["tags"] = encode_dict_value(
-                metric_copy.get("tags", {})
-            )
-            metrics_copy.append(metric_copy)
+            for key, value in metric_copy.items():
+                metric_copy[key] = encode_dict_value(value)
+            metric_copy["asset_name"] = asset_name
+            all_metrics.append(metric_copy)
 
-        df = pd.DataFrame.from_records(metrics_copy)
+    if not all_metrics:
+        logging.warning(
+            SquirrelMessage(
+                tree=acorns.TREE.__class__.__name__,
+                acorn=acorns.NAMES["qc"],
+                message=f"No quality_control metrics found for subject {subject_id}",
+            ).to_json()
+        )
+        return pd.DataFrame()
 
-        acorns.TREE.hide(cache_key, df)
+    df = pd.DataFrame.from_records(all_metrics)
+    acorns.TREE.hide(cache_key, df)
 
-        logging.info(SquirrelMessage(
+    logging.info(
+        SquirrelMessage(
             tree=acorns.TREE.__class__.__name__,
             acorn=acorns.NAMES["qc"],
-            message=f"Cached QC data for {asset_name}"
-        ).to_json())
+            message=f"Cached QC data for subject {subject_id} ({len(records)} assets, {len(all_metrics)} metrics)",
+        ).to_json()
+    )
 
     return df
 
 
-def _qc_multiple(
-    asset_names: list[str], force_update: bool
-) -> pd.DataFrame:
-    """Fetch and merge QC data for multiple assets."""
-    cache_keys = [f"qc/{name}" for name in asset_names]
-
-    if force_update:
-        setup_logging()
-        for name in asset_names:
-            _qc_single(name, force_update=True)
-    else:
-        df_check = acorns.TREE.scurry(cache_keys[0])
-        if df_check.empty:
-            raise ValueError(
-                f"Cache is empty for {asset_names[0]}. "
-                "Use force_update=True to fetch data from database."
-            )
-
-    df = acorns.TREE.scurry(cache_keys)
-
+def _filter_by_asset_names(df: pd.DataFrame, asset_names: str | list[str], subject_id: str) -> pd.DataFrame:
+    """Filter QC DataFrame to specific asset names and validate they exist."""
     if df.empty:
-        logging.warning(SquirrelMessage(
-            tree=acorns.TREE.__class__.__name__,
-            acorn=acorns.NAMES["qc"],
-            message=f"No QC data found for assets: {asset_names}"
-        ).to_json())
+        return df
 
-    return df
+    if isinstance(asset_names, str):
+        asset_names = [asset_names]
+
+    available_assets = df["asset_name"].unique().tolist()
+    missing_assets = [name for name in asset_names if name not in available_assets]
+
+    if missing_assets:
+        raise ValueError(
+            f"Asset(s) {missing_assets} not found in cache for subject {subject_id}. "
+            f"Available assets: {available_assets}"
+        )
+
+    return df[df["asset_name"].isin(asset_names)].reset_index(drop=True)

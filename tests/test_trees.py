@@ -9,9 +9,9 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 
 from zombie_squirrel.forest import (
-    Tree,
     MemoryTree,
     S3Tree,
+    Tree,
 )
 
 
@@ -167,9 +167,7 @@ class TestS3Tree(unittest.TestCase):
         mock_s3_client.put_object.assert_called_once()
         call_kwargs = mock_s3_client.put_object.call_args[1]
         self.assertEqual(call_kwargs["Bucket"], "aind-scratch-data")
-        self.assertEqual(
-            call_kwargs["Key"], "application-caches/zs_test_table.pqt"
-        )
+        self.assertEqual(call_kwargs["Key"], "application-caches/zs_test_table.pqt")
         self.assertIsInstance(call_kwargs["Body"], bytes)
 
     @patch("zombie_squirrel.forest.duckdb.query")
@@ -198,9 +196,7 @@ class TestS3Tree(unittest.TestCase):
 
     @patch("zombie_squirrel.forest.duckdb.query")
     @patch("zombie_squirrel.forest.boto3.client")
-    def test_s3_scurry_handles_error(
-        self, mock_boto3_client, mock_duckdb_query
-    ):
+    def test_s3_scurry_handles_error(self, mock_boto3_client, mock_duckdb_query):
         """Test S3Tree.scurry returns empty DataFrame on error."""
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
@@ -214,18 +210,14 @@ class TestS3Tree(unittest.TestCase):
 
     @patch("zombie_squirrel.forest.duckdb.query")
     @patch("zombie_squirrel.forest.boto3.client")
-    def test_s3_scurry_multiple_tables(
-        self, mock_boto3_client, mock_duckdb_query
-    ):
+    def test_s3_scurry_multiple_tables(self, mock_boto3_client, mock_duckdb_query):
         """Test S3Tree.scurry merges multiple tables with DuckDB."""
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client
 
-        expected_df = pd.DataFrame({
-            "col1": [1, 2, 3, 4],
-            "col2": ["a", "b", "c", "d"],
-            "asset_name": ["table1", "table1", "table2", "table2"]
-        })
+        expected_df = pd.DataFrame(
+            {"col1": [1, 2, 3, 4], "col2": ["a", "b", "c", "d"], "asset_name": ["table1", "table1", "table2", "table2"]}
+        )
         mock_result = MagicMock()
         mock_result.to_df.return_value = expected_df
         mock_duckdb_query.return_value = mock_result
@@ -242,9 +234,7 @@ class TestS3Tree(unittest.TestCase):
 
     @patch("zombie_squirrel.forest.duckdb.query")
     @patch("zombie_squirrel.forest.boto3.client")
-    def test_s3_scurry_multiple_handles_error(
-        self, mock_boto3_client, mock_duckdb_query
-    ):
+    def test_s3_scurry_multiple_handles_error(self, mock_boto3_client, mock_duckdb_query):
         """Test S3Tree.scurry multiple tables handles errors."""
         mock_s3_client = MagicMock()
         mock_boto3_client.return_value = mock_s3_client

@@ -1,11 +1,13 @@
 """Utility functions for zombie-squirrel package."""
 
 import logging
+
 from pydantic import BaseModel
 
 
 class SquirrelMessage(BaseModel):
     """Structured logging message for zombie-squirrel operations."""
+
     tree: str
     acorn: str
     message: str
@@ -17,14 +19,10 @@ class SquirrelMessage(BaseModel):
 
 def setup_logging():
     """Configure logging for zombie-squirrel package.
-    
+
     Sets up INFO level logging with timestamp format.
     Safe to call multiple times - uses force=True to reconfigure."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-        force=True
-    )
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", force=True)
 
 
 def prefix_table_name(table_name: str) -> str:

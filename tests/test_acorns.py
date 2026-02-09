@@ -5,8 +5,8 @@ Tests for acorn registration and NAMES dictionary."""
 import unittest
 
 from zombie_squirrel.acorns import (
-    NAMES,
     ACORN_REGISTRY,
+    NAMES,
 )
 
 

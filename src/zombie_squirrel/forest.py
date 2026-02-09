@@ -3,13 +3,12 @@
 import io
 import logging
 from abc import ABC, abstractmethod
-from typing import Union
 
 import boto3
 import duckdb
 import pandas as pd
 
-from zombie_squirrel.utils import get_s3_cache_path, prefix_table_name, SquirrelMessage
+from zombie_squirrel.utils import SquirrelMessage, get_s3_cache_path, prefix_table_name
 
 
 class Tree(ABC):
@@ -25,11 +24,9 @@ class Tree(ABC):
         pass  # pragma: no cover
 
     @abstractmethod
-    def scurry(
-        self, table_name: Union[str, list[str]]
-    ) -> pd.DataFrame:
+    def scurry(self, table_name: str | list[str]) -> pd.DataFrame:
         """Fetch records from the cache.
-        
+
         Args:
             table_name: Single table name or list of table names.
                 When a list is provided, merges all tables and adds
@@ -62,15 +59,15 @@ class S3Tree(Tree):
             Key=s3_key,
             Body=parquet_buffer.getvalue(),
         )
-        logging.info(SquirrelMessage(
-            tree="S3Tree",
-            acorn=table_name,
-            message=f"Stored cache to s3://{self.bucket}/{s3_key}"
-        ).to_json())
+        logging.info(
+            SquirrelMessage(
+                tree="S3Tree", acorn=table_name, message=f"Stored cache to s3://{self.bucket}/{s3_key}"
+            ).to_json()
+        )
 
-    def scurry(self, table_name: Union[str, list[str]]) -> pd.DataFrame:
+    def scurry(self, table_name: str | list[str]) -> pd.DataFrame:
         """Fetch DataFrame from S3 parquet file(s).
-        
+
         When given a list of table names, merges them using DuckDB
         and adds an 'asset_name' column.
         """
@@ -90,18 +87,18 @@ class S3Tree(Tree):
                 )
             """
             result = duckdb.query(query).to_df()
-            logging.info(SquirrelMessage(
-                tree="S3Tree",
-                acorn=table_name,
-                message=f"Retrieved cache from s3://{self.bucket}/{s3_key}"
-            ).to_json())
+            logging.info(
+                SquirrelMessage(
+                    tree="S3Tree", acorn=table_name, message=f"Retrieved cache from s3://{self.bucket}/{s3_key}"
+                ).to_json()
+            )
             return result
         except Exception as e:
-            logging.warning(SquirrelMessage(
-                tree="S3Tree",
-                acorn=table_name,
-                message=f"Error fetching from cache {s3_key}: {e}"
-            ).to_json())
+            logging.warning(
+                SquirrelMessage(
+                    tree="S3Tree", acorn=table_name, message=f"Error fetching from cache {s3_key}: {e}"
+                ).to_json()
+            )
             return pd.DataFrame()
 
     def _scurry_multiple(self, table_names: list[str]) -> pd.DataFrame:
@@ -117,23 +114,23 @@ class S3Tree(Tree):
             asset_names.append(tbl_name)
 
         try:
-            union_query = " UNION ALL ".join([
-                f"SELECT *, '{asset}' as asset_name FROM read_parquet({path})"
-                for path, asset in zip(parquet_paths, asset_names)
-            ])
+            union_query = " UNION ALL ".join(
+                [
+                    f"SELECT *, '{asset}' as asset_name FROM read_parquet({path})"
+                    for path, asset in zip(parquet_paths, asset_names, strict=False)
+                ]
+            )
             result = duckdb.query(union_query).to_df()
-            logging.info(SquirrelMessage(
-                tree="S3Tree",
-                acorn="merged",
-                message=f"Merged {len(table_names)} tables from S3"
-            ).to_json())
+            logging.info(
+                SquirrelMessage(
+                    tree="S3Tree", acorn="merged", message=f"Merged {len(table_names)} tables from S3"
+                ).to_json()
+            )
             return result
         except Exception as e:
-            logging.warning(SquirrelMessage(
-                tree="S3Tree",
-                acorn="merged",
-                message=f"Error merging tables: {e}"
-            ).to_json())
+            logging.warning(
+                SquirrelMessage(tree="S3Tree", acorn="merged", message=f"Error merging tables: {e}").to_json()
+            )
             return pd.DataFrame()
 
 
@@ -147,16 +144,16 @@ class MemoryTree(Tree):
 
     def hide(self, table_name: str, data: pd.DataFrame) -> None:
         """Store DataFrame in memory."""
-        logging.info(SquirrelMessage(
-            tree="MemoryTree",
-            acorn=table_name,
-            message=f"Storing cache in memory for {table_name}"
-        ).to_json())
+        logging.info(
+            SquirrelMessage(
+                tree="MemoryTree", acorn=table_name, message=f"Storing cache in memory for {table_name}"
+            ).to_json()
+        )
         self._store[table_name] = data
 
-    def scurry(self, table_name: Union[str, list[str]]) -> pd.DataFrame:
+    def scurry(self, table_name: str | list[str]) -> pd.DataFrame:
         """Fetch DataFrame from memory.
-        
+
         When given a list of table names, merges them and adds
         an 'asset_name' column.
         """
@@ -166,11 +163,11 @@ class MemoryTree(Tree):
 
     def _scurry_single(self, table_name: str) -> pd.DataFrame:
         """Fetch a single table from memory."""
-        logging.info(SquirrelMessage(
-            tree="MemoryTree",
-            acorn=table_name,
-            message=f"Fetching cache from memory for {table_name}"
-        ).to_json())
+        logging.info(
+            SquirrelMessage(
+                tree="MemoryTree", acorn=table_name, message=f"Fetching cache from memory for {table_name}"
+            ).to_json()
+        )
         return self._store.get(table_name, pd.DataFrame())
 
     def _scurry_multiple(self, table_names: list[str]) -> pd.DataFrame:
@@ -184,17 +181,17 @@ class MemoryTree(Tree):
                 dfs.append(df)
 
         if not dfs:
-            logging.warning(SquirrelMessage(
-                tree="MemoryTree",
-                acorn="merged",
-                message=f"No valid tables found among {table_names}"
-            ).to_json())
+            logging.warning(
+                SquirrelMessage(
+                    tree="MemoryTree", acorn="merged", message=f"No valid tables found among {table_names}"
+                ).to_json()
+            )
             return pd.DataFrame()
 
         result = pd.concat(dfs, ignore_index=True)
-        logging.info(SquirrelMessage(
-            tree="MemoryTree",
-            acorn="merged",
-            message=f"Merged {len(dfs)} tables from memory"
-        ).to_json())
+        logging.info(
+            SquirrelMessage(
+                tree="MemoryTree", acorn="merged", message=f"Merged {len(dfs)} tables from memory"
+            ).to_json()
+        )
         return result

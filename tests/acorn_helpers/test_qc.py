@@ -8,8 +8,8 @@ import pandas as pd
 
 import zombie_squirrel.acorns as acorns
 from zombie_squirrel.acorn_helpers.qc import (
-    encode_dict_value,
     decode_dict_value,
+    encode_dict_value,
     qc,
 )
 from zombie_squirrel.forest import MemoryTree
@@ -334,10 +334,7 @@ class TestQCMemoryTree(unittest.TestCase):
 
         self.assertEqual(len(df), 2)
         self.assertIn("asset_name", df.columns)
-        self.assertListEqual(
-            sorted(df["asset_name"].unique().tolist()),
-            ["qc/asset1", "qc/asset2"]
-        )
+        self.assertListEqual(sorted(df["asset_name"].unique().tolist()), ["qc/asset1", "qc/asset2"])
         mock_client_class.assert_not_called()
 
     def test_qc_multiple_empty_assets_no_force_update(self):

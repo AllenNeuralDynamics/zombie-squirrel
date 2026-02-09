@@ -6,7 +6,7 @@ import pandas as pd
 from aind_data_access_api.document_db import MetadataDbClient
 
 import zombie_squirrel.acorns as acorns
-from zombie_squirrel.utils import setup_logging, SquirrelMessage
+from zombie_squirrel.utils import SquirrelMessage, setup_logging
 
 
 @acorns.register_acorn(acorns.NAMES["r2d"])
@@ -24,17 +24,15 @@ def raw_to_derived(force_update: bool = False) -> pd.DataFrame:
     df = acorns.TREE.scurry(acorns.NAMES["r2d"])
 
     if df.empty and not force_update:
-        raise ValueError(
-            "Cache is empty. Use force_update=True to fetch data from database."
-        )
+        raise ValueError("Cache is empty. Use force_update=True to fetch data from database.")
 
     if df.empty or force_update:
         setup_logging()
-        logging.info(SquirrelMessage(
-            tree=acorns.TREE.__class__.__name__,
-            acorn=acorns.NAMES["r2d"],
-            message="Updating cache"
-        ).to_json())
+        logging.info(
+            SquirrelMessage(
+                tree=acorns.TREE.__class__.__name__, acorn=acorns.NAMES["r2d"], message="Updating cache"
+            ).to_json()
+        )
         client = MetadataDbClient(
             host=acorns.API_GATEWAY_HOST,
             version="v2",

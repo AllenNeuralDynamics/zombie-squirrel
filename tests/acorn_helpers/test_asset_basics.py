@@ -211,9 +211,7 @@ class TestAssetBasics(unittest.TestCase):
                     "acquisition_start_time": "2023-01-01T10:00:00",
                     "acquisition_end_time": "2023-01-01T11:00:00",
                 },
-                "other_identifiers": {
-                    "Code Ocean": ["df429003-91a0-45d2-8457-66b156ad8bfa"]
-                },
+                "other_identifiers": {"Code Ocean": ["df429003-91a0-45d2-8457-66b156ad8bfa"]},
             }
         ]
 
@@ -221,9 +219,7 @@ class TestAssetBasics(unittest.TestCase):
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result.iloc[0]["_id"], "id1")
-        self.assertEqual(
-            result.iloc[0]["code_ocean"], ["df429003-91a0-45d2-8457-66b156ad8bfa"]
-        )
+        self.assertEqual(result.iloc[0]["code_ocean"], ["df429003-91a0-45d2-8457-66b156ad8bfa"])
 
 
 if __name__ == "__main__":
