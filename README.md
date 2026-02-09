@@ -1,4 +1,4 @@
-# zombie-squirrel
+# ZOMBIE Squirrel
 
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 ![Code Style](https://img.shields.io/badge/code%20style-black-black)
@@ -8,6 +8,10 @@
 ![Python](https://img.shields.io/badge/python->=3.10-blue?logo=python)
 
 <img src="zombie-squirrel_logo.png" width="400" alt="Logo (image from ChatGPT)">
+
+`zombie-squirrel` is a set of one-line functions that handle the entire process of caching and retrieving data (and metadata) from AIND data assets.
+
+In the background, the ZOMBIE squirrel repackages data/metadata into dataframes and stores them on S3 in a flat bucket, or in memory for testing.
 
 ## Installation
 
@@ -33,13 +37,14 @@ from zombie_squirrel import unique_project_names
 project_names = unique_project_names()
 ```
 
-| Function | Description |
-| -------- | ----------- |
-| `unique_project_names` | Fetch unique project names from docdb |
-| `unique_subject_ids` | Fetch unique subject IDs from docdb |
-| `asset_basics` | Fetch basic asset metadata including modalities, projects, and subject info |
-| `source_data` | Fetch source data references for derived records |
-| `raw_to_derived` | Fetch mapping of raw records to their derived records | 
+| Function | Description | Parameters |
+| -------- | ----------- | ---------- |
+| `unique_project_names` | Fetch unique project names from docdb | |
+| `unique_subject_ids` | Fetch unique subject IDs from docdb | |
+| `asset_basics` | Fetch basic asset metadata including modalities, projects, and subject info | |
+| `source_data` | Fetch source data references for derived records | |
+| `raw_to_derived` | Fetch mapping of raw records to their derived records | |
+| `qc` | Fetch QC dataframe for a single or multiple records | `str` or `list[str]` |
 
 ### Hide the acorns
 

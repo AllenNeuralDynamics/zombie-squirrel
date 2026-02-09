@@ -11,8 +11,8 @@ from zombie_squirrel.acorn_helpers.source_data import source_data
 class TestSourceData(unittest.TestCase):
     """Tests for source_data acorn."""
 
-    @patch("zombie_squirrel.acorn_contents.source_data.MetadataDbClient")
-    @patch("zombie_squirrel.acorn_contents.source_data.acorns.TREE")
+    @patch("zombie_squirrel.acorn_helpers.source_data.MetadataDbClient")
+    @patch("zombie_squirrel.acorn_helpers.source_data.acorns.TREE")
     def test_source_data_cache_hit(self, mock_tree, mock_client_class):
         """Test returning cached source data."""
         cached_df = pd.DataFrame(
@@ -29,7 +29,7 @@ class TestSourceData(unittest.TestCase):
         self.assertEqual(result.iloc[0]["source_data"], "source1, source2")
         mock_client_class.assert_not_called()
 
-    @patch("zombie_squirrel.acorn_contents.source_data.acorns.TREE")
+    @patch("zombie_squirrel.acorn_helpers.source_data.acorns.TREE")
     def test_source_data_empty_cache_raises_error(self, mock_tree):
         """Test that empty cache raises ValueError without force_update."""
         mock_tree.scurry.return_value = pd.DataFrame()
@@ -40,8 +40,8 @@ class TestSourceData(unittest.TestCase):
         self.assertIn("Cache is empty", str(context.exception))
         self.assertIn("force_update=True", str(context.exception))
 
-    @patch("zombie_squirrel.acorn_contents.source_data.MetadataDbClient")
-    @patch("zombie_squirrel.acorn_contents.source_data.acorns.TREE")
+    @patch("zombie_squirrel.acorn_helpers.source_data.MetadataDbClient")
+    @patch("zombie_squirrel.acorn_helpers.source_data.acorns.TREE")
     def test_source_data_cache_miss(self, mock_tree, mock_client_class):
         """Test fetching source data when cache is empty."""
         mock_tree.scurry.return_value = pd.DataFrame()
@@ -61,8 +61,8 @@ class TestSourceData(unittest.TestCase):
         self.assertEqual(result.iloc[0]["source_data"], "src1, src2")
         self.assertEqual(result.iloc[1]["source_data"], "")
 
-    @patch("zombie_squirrel.acorn_contents.source_data.MetadataDbClient")
-    @patch("zombie_squirrel.acorn_contents.source_data.acorns.TREE")
+    @patch("zombie_squirrel.acorn_helpers.source_data.MetadataDbClient")
+    @patch("zombie_squirrel.acorn_helpers.source_data.acorns.TREE")
     def test_source_data_force_update(self, mock_tree, mock_client_class):
         """Test force_update bypasses cache."""
         cached_df = pd.DataFrame(

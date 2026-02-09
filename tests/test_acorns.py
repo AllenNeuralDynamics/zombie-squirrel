@@ -20,6 +20,7 @@ class TestAcornRegistration(unittest.TestCase):
         self.assertIn(NAMES["basics"], ACORN_REGISTRY)
         self.assertIn(NAMES["d2r"], ACORN_REGISTRY)
         self.assertIn(NAMES["r2d"], ACORN_REGISTRY)
+        self.assertIn(NAMES["qc"], ACORN_REGISTRY)
 
     def test_registry_values_are_callable(self):
         """Test that registry values are callable functions."""
@@ -28,7 +29,7 @@ class TestAcornRegistration(unittest.TestCase):
 
     def test_names_dict_completeness(self):
         """Test that NAMES dict has expected keys."""
-        expected_keys = ["upn", "usi", "basics", "d2r", "r2d"]
+        expected_keys = ["upn", "usi", "basics", "d2r", "r2d", "qc"]
         for key in expected_keys:
             self.assertIn(key, NAMES)
 

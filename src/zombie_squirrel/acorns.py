@@ -34,7 +34,7 @@ elif forest_type == "memory":
 else:
     raise ValueError(f"Unknown FOREST_TYPE: {forest_type}")
 
-# --- Acorn registry and names -----------------------------------------------------
+# --- Acorn registry and names -------------------------------------------
 
 NAMES = {
     "upn": "unique_project_names",
@@ -42,6 +42,7 @@ NAMES = {
     "basics": "asset_basics",
     "d2r": "source_data",
     "r2d": "raw_to_derived",
+    "qc": "quality_control",
 }
 
 ACORN_REGISTRY: dict[str, Callable[[], Any]] = {}

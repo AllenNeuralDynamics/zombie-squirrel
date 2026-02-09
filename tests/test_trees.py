@@ -104,6 +104,39 @@ class TestMemoryTree(unittest.TestCase):
         retrieved = self.tree.scurry("empty_table")
         pd.testing.assert_frame_equal(df, retrieved)
 
+    def test_scurry_multiple_tables(self):
+        """Test scurrying multiple tables merges them with asset_name."""
+        df1 = pd.DataFrame({"col1": [1, 2], "col2": ["a", "b"]})
+        df2 = pd.DataFrame({"col1": [3, 4], "col2": ["c", "d"]})
+
+        self.tree.hide("table1", df1)
+        self.tree.hide("table2", df2)
+
+        result = self.tree.scurry(["table1", "table2"])
+
+        self.assertEqual(len(result), 4)
+        self.assertIn("asset_name", result.columns)
+        self.assertEqual(result[result["col1"] == 1].iloc[0]["asset_name"], "table1")
+        self.assertEqual(result[result["col1"] == 3].iloc[0]["asset_name"], "table2")
+
+    def test_scurry_multiple_with_missing_table(self):
+        """Test scurrying multiple tables where some don't exist."""
+        df1 = pd.DataFrame({"col1": [1, 2]})
+        self.tree.hide("table1", df1)
+
+        result = self.tree.scurry(["table1", "nonexistent"])
+
+        self.assertEqual(len(result), 2)
+        self.assertIn("asset_name", result.columns)
+        self.assertTrue((result["asset_name"] == "table1").all())
+
+    def test_scurry_multiple_all_missing(self):
+        """Test scurrying multiple non-existent tables returns empty."""
+        result = self.tree.scurry(["missing1", "missing2"])
+
+        self.assertTrue(result.empty)
+        self.assertIsInstance(result, pd.DataFrame)
+
 
 class TestS3Tree(unittest.TestCase):
     """Tests for S3Tree implementation with mocking."""
@@ -175,6 +208,50 @@ class TestS3Tree(unittest.TestCase):
 
         acorn = S3Tree()
         result = acorn.scurry("nonexistent_table")
+
+        self.assertTrue(result.empty)
+        self.assertIsInstance(result, pd.DataFrame)
+
+    @patch("zombie_squirrel.forest.duckdb.query")
+    @patch("zombie_squirrel.forest.boto3.client")
+    def test_s3_scurry_multiple_tables(
+        self, mock_boto3_client, mock_duckdb_query
+    ):
+        """Test S3Tree.scurry merges multiple tables with DuckDB."""
+        mock_s3_client = MagicMock()
+        mock_boto3_client.return_value = mock_s3_client
+
+        expected_df = pd.DataFrame({
+            "col1": [1, 2, 3, 4],
+            "col2": ["a", "b", "c", "d"],
+            "asset_name": ["table1", "table1", "table2", "table2"]
+        })
+        mock_result = MagicMock()
+        mock_result.to_df.return_value = expected_df
+        mock_duckdb_query.return_value = mock_result
+
+        acorn = S3Tree()
+        result = acorn.scurry(["table1", "table2"])
+
+        mock_duckdb_query.assert_called_once()
+        query_call = mock_duckdb_query.call_args[0][0]
+        self.assertIn("UNION ALL", query_call)
+        self.assertIn("'table1' as asset_name", query_call)
+        self.assertIn("'table2' as asset_name", query_call)
+        pd.testing.assert_frame_equal(result, expected_df)
+
+    @patch("zombie_squirrel.forest.duckdb.query")
+    @patch("zombie_squirrel.forest.boto3.client")
+    def test_s3_scurry_multiple_handles_error(
+        self, mock_boto3_client, mock_duckdb_query
+    ):
+        """Test S3Tree.scurry multiple tables handles errors."""
+        mock_s3_client = MagicMock()
+        mock_boto3_client.return_value = mock_s3_client
+        mock_duckdb_query.side_effect = Exception("Merge error")
+
+        acorn = S3Tree()
+        result = acorn.scurry(["table1", "table2"])
 
         self.assertTrue(result.empty)
         self.assertIsInstance(result, pd.DataFrame)
