@@ -11,6 +11,7 @@ from zombie_squirrel.utils import SquirrelMessage, setup_logging
 
 
 def encode_dict_value(value):
+    """Encode dict or list values as JSON strings with a prefix for DataFrame storage."""
     if isinstance(value, (dict, list)):
         return f"json:{json.dumps(value)}"
     if value is not None and not isinstance(value, str):
@@ -19,6 +20,7 @@ def encode_dict_value(value):
 
 
 def decode_dict_value(value):
+    """Decode JSON strings with prefix back to dict or list."""
     if isinstance(value, str) and value.startswith("json:"):
         return json.loads(value[5:])
     return value

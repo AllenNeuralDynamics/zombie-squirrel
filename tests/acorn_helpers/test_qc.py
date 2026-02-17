@@ -19,30 +19,36 @@ class TestQCEncodeDecode(unittest.TestCase):
     """Tests for encode_dict_value and decode_dict_value functions."""
 
     def test_encode_dict_simple(self):
+        """Test encoding a simple dictionary."""
         test_dict = {"key": "value"}
         encoded = encode_dict_value(test_dict)
         self.assertEqual(encoded, 'json:{"key": "value"}')
 
     def test_encode_dict_nested(self):
+        """Test encoding a nested dictionary."""
         test_dict = {"outer": {"inner": "value"}}
         encoded = encode_dict_value(test_dict)
         decoded = json.loads(encoded[5:])
         self.assertEqual(decoded, test_dict)
 
     def test_encode_non_dict(self):
+        """Test that non-dict values are returned as-is."""
         result = encode_dict_value("string_value")
         self.assertEqual(result, "string_value")
 
     def test_decode_dict(self):
+        """Test decoding a JSON-encoded dictionary string."""
         encoded = 'json:{"key": "value"}'
         decoded = decode_dict_value(encoded)
         self.assertEqual(decoded, {"key": "value"})
 
     def test_decode_non_prefixed_string(self):
+        """Test that non-prefixed strings are returned as-is."""
         result = decode_dict_value("not_prefixed")
         self.assertEqual(result, "not_prefixed")
 
     def test_encode_decode_roundtrip(self):
+        """Test that encoding and then decoding returns the original dictionary."""
         original = {"status": "pass", "nested": {"count": 42}}
         encoded = encode_dict_value(original)
         decoded = decode_dict_value(encoded)
@@ -53,6 +59,7 @@ class TestQCMemoryTree(unittest.TestCase):
     """Tests for QC acorn with in-memory tree."""
 
     def setUp(self):
+        """Set up in-memory tree and mock MetadataDbClient."""
         acorns.TREE = MemoryTree()
 
     @patch("zombie_squirrel.acorn_helpers.qc.MetadataDbClient")
