@@ -141,12 +141,10 @@ class TestQCMemoryTree(unittest.TestCase):
         mock_client_class.assert_not_called()
 
     def test_qc_empty_cache_raises_error(self):
-        """Test that empty cache raises ValueError without force_update."""
-        with self.assertRaises(ValueError) as context:
-            qc("nonexistent-asset", force_update=False)
+        """Test that empty cache logs error and returns empty dataframe without force_update."""
+        df = qc("nonexistent-asset", force_update=False)
 
-        self.assertIn("Cache is empty", str(context.exception))
-        self.assertIn("force_update=True", str(context.exception))
+        self.assertTrue(df.empty)
 
     @patch("zombie_squirrel.acorn_helpers.qc.MetadataDbClient")
     def test_qc_no_record_found(self, mock_client_class):
@@ -260,53 +258,50 @@ class TestQCMemoryTree(unittest.TestCase):
         mock_client_instance = MagicMock()
         mock_client_class.return_value = mock_client_instance
 
-        mock_client_instance.retrieve_docdb_records.side_effect = [
-            [
-                {
-                    "_id": "asset1",
-                    "name": "asset1",
-                    "quality_control": {
-                        "metrics": [
-                            {
-                                "object_type": "QC metric",
-                                "name": "Metric A",
-                                "stage": "Processing",
-                                "modality": {"name": "Test", "abbreviation": "t"},
-                                "value": "pass",
-                                "tags": None,
-                                "status_history": [],
-                            }
-                        ]
-                    },
-                }
-            ],
-            [
-                {
-                    "_id": "asset2",
-                    "name": "asset2",
-                    "quality_control": {
-                        "metrics": [
-                            {
-                                "object_type": "QC metric",
-                                "name": "Metric B",
-                                "stage": "Processing",
-                                "modality": {"name": "Test", "abbreviation": "t"},
-                                "value": "fail",
-                                "tags": None,
-                                "status_history": [],
-                            }
-                        ]
-                    },
-                }
-            ],
+        # Single call returns all records for the subject
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "asset1",
+                "name": "asset1",
+                "quality_control": {
+                    "metrics": [
+                        {
+                            "object_type": "QC metric",
+                            "name": "Metric A",
+                            "stage": "Processing",
+                            "modality": {"name": "Test", "abbreviation": "t"},
+                            "value": "pass",
+                            "tags": None,
+                            "status_history": [],
+                        }
+                    ]
+                },
+            },
+            {
+                "_id": "asset2",
+                "name": "asset2",
+                "quality_control": {
+                    "metrics": [
+                        {
+                            "object_type": "QC metric",
+                            "name": "Metric B",
+                            "stage": "Processing",
+                            "modality": {"name": "Test", "abbreviation": "t"},
+                            "value": "fail",
+                            "tags": None,
+                            "status_history": [],
+                        }
+                    ]
+                },
+            },
         ]
 
-        df = qc(["asset1", "asset2"], force_update=True)
+        df = qc("test-subject", asset_names=["asset1", "asset2"], force_update=True)
 
         self.assertEqual(len(df), 2)
         self.assertIn("asset_name", df.columns)
-        self.assertEqual(df[df["name"] == "Metric A"].iloc[0]["asset_name"], "qc/asset1")
-        self.assertEqual(df[df["name"] == "Metric B"].iloc[0]["asset_name"], "qc/asset2")
+        self.assertEqual(df[df["name"] == "Metric A"].iloc[0]["asset_name"], "asset1")
+        self.assertEqual(df[df["name"] == "Metric B"].iloc[0]["asset_name"], "asset2")
 
     @patch("zombie_squirrel.acorn_helpers.qc.MetadataDbClient")
     def test_qc_multiple_assets_from_cache(self, mock_client_class):
@@ -327,22 +322,114 @@ class TestQCMemoryTree(unittest.TestCase):
                 "tags": ["json:{}"],
             }
         )
-        acorns.TREE.hide("qc/asset1", cache_df1)
-        acorns.TREE.hide("qc/asset2", cache_df2)
+        # Combine both dataframes and cache under a single subject
+        cache_df1["asset_name"] = "asset1"
+        cache_df2["asset_name"] = "asset2"
+        combined_df = pd.concat([cache_df1, cache_df2], ignore_index=True)
+        acorns.TREE.hide("qc/test-subject", combined_df)
 
-        df = qc(["asset1", "asset2"], force_update=False)
+        df = qc("test-subject", asset_names=["asset1", "asset2"], force_update=False)
 
         self.assertEqual(len(df), 2)
         self.assertIn("asset_name", df.columns)
-        self.assertListEqual(sorted(df["asset_name"].unique().tolist()), ["qc/asset1", "qc/asset2"])
+        self.assertListEqual(sorted(df["asset_name"].unique().tolist()), ["asset1", "asset2"])
         mock_client_class.assert_not_called()
 
     def test_qc_multiple_empty_assets_no_force_update(self):
         """Test multiple assets with empty cache and no force_update."""
-        with self.assertRaises(ValueError) as context:
-            qc(["nonexistent1", "nonexistent2"], force_update=False)
+        df = qc("nonexistent-subject", asset_names=["nonexistent1", "nonexistent2"], force_update=False)
 
-        self.assertIn("Cache is empty", str(context.exception))
+        self.assertTrue(df.empty)
+
+    def test_encode_dict_value_plain_values(self):
+        """Test encode_dict_value with None and plain string values."""
+        from zombie_squirrel.acorn_helpers.qc import encode_dict_value
+
+        self.assertIsNone(encode_dict_value(None))
+        self.assertEqual(encode_dict_value("plain_string"), "plain_string")
+        self.assertEqual(encode_dict_value(42), "42")
+        self.assertEqual(encode_dict_value(3.14), "3.14")
+        self.assertEqual(encode_dict_value(True), "True")
+
+    @patch("zombie_squirrel.acorn_helpers.qc.MetadataDbClient")
+    def test_qc_single_asset_name_string(self, mock_client_class):
+        """Test filtering with a single asset name as string instead of list."""
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "asset1",
+                "name": "asset1",
+                "quality_control": {
+                    "metrics": [
+                        {
+                            "object_type": "QC metric",
+                            "name": "Metric A",
+                            "stage": "Processing",
+                            "modality": {"name": "Test", "abbreviation": "t"},
+                            "value": "pass",
+                            "tags": None,
+                            "status_history": [],
+                        }
+                    ]
+                },
+            },
+            {
+                "_id": "asset2",
+                "name": "asset2",
+                "quality_control": {
+                    "metrics": [
+                        {
+                            "object_type": "QC metric",
+                            "name": "Metric B",
+                            "stage": "Processing",
+                            "modality": {"name": "Test", "abbreviation": "t"},
+                            "value": "fail",
+                            "tags": None,
+                            "status_history": [],
+                        }
+                    ]
+                },
+            },
+        ]
+
+        df = qc("test-subject", asset_names="asset1", force_update=True)
+
+        self.assertEqual(len(df), 1)
+        self.assertEqual(df.iloc[0]["name"], "Metric A")
+        self.assertEqual(df.iloc[0]["asset_name"], "asset1")
+
+    @patch("zombie_squirrel.acorn_helpers.qc.MetadataDbClient")
+    def test_qc_missing_asset_names(self, mock_client_class):
+        """Test requesting non-existent asset names triggers warning."""
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "asset1",
+                "name": "asset1",
+                "quality_control": {
+                    "metrics": [
+                        {
+                            "object_type": "QC metric",
+                            "name": "Metric A",
+                            "stage": "Processing",
+                            "modality": {"name": "Test", "abbreviation": "t"},
+                            "value": "pass",
+                            "tags": None,
+                            "status_history": [],
+                        }
+                    ]
+                },
+            },
+        ]
+
+        df = qc("test-subject", asset_names=["asset1", "nonexistent"], force_update=True)
+
+        self.assertEqual(len(df), 1)
+        self.assertEqual(df.iloc[0]["name"], "Metric A")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,8 @@
 """Unit tests for raw_to_derived acorn."""
 
+import json
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -17,7 +19,7 @@ class TestRawToDerived(unittest.TestCase):
         """Test returning cached raw to derived mapping."""
         cached_df = pd.DataFrame(
             {
-                "_id": ["raw1", "raw2"],
+                "name": ["raw1", "raw2"],
                 "derived_records": ["derived1, derived2", "derived3"],
             }
         )
@@ -43,36 +45,36 @@ class TestRawToDerived(unittest.TestCase):
     @patch("zombie_squirrel.acorn_helpers.raw_to_derived.MetadataDbClient")
     @patch("zombie_squirrel.acorn_helpers.raw_to_derived.acorns.TREE")
     def test_raw_to_derived_cache_miss(self, mock_tree, mock_client_class):
-        """Test fetching raw to derived mapping when cache is empty."""
+        """Test fetching raw to derived mapping when cache is empty using real test records."""
         mock_tree.scurry.return_value = pd.DataFrame()
         mock_client_instance = MagicMock()
         mock_client_class.return_value = mock_client_instance
 
-        # Mock raw and derived records
+        resources_path = Path(__file__).parent.parent / "resources"
+        with open(resources_path / "v2_raw.json") as f:
+            raw_record = json.load(f)
+        with open(resources_path / "v2_derived.json") as f:
+            derived_record = json.load(f)
+
         mock_client_instance.retrieve_docdb_records.side_effect = [
-            [
-                {"_id": "raw1"},
-                {"_id": "raw2"},
-            ],  # First call: raw records
-            [
-                {
-                    "_id": "derived1",
-                    "data_description": {"source_data": ["raw1"]},
-                },
-                {
-                    "_id": "derived2",
-                    "data_description": {"source_data": ["raw1", "raw2"]},
-                },
-            ],  # Second call: derived records
+            [raw_record],
+            [derived_record],
         ]
 
         result = raw_to_derived(force_update=True)
 
-        self.assertEqual(len(result), 2)
-        raw1_row = result[result["_id"] == "raw1"]
-        raw2_row = result[result["_id"] == "raw2"]
-        self.assertEqual(raw1_row.iloc[0]["derived_records"], "derived1, derived2")
-        self.assertEqual(raw2_row.iloc[0]["derived_records"], "derived2")
+        self.assertEqual(len(result), 1)
+        raw_row = result[result["name"] == raw_record["name"]]
+        self.assertEqual(len(raw_row), 1)
+
+        expected_derived_name = derived_record["name"]
+        actual_derived_records = raw_row.iloc[0]["derived_records"]
+
+        self.assertIn(
+            expected_derived_name,
+            actual_derived_records,
+            f"Expected derived record {expected_derived_name} not found in mapping. Got: {actual_derived_records}",
+        )
 
     @patch("zombie_squirrel.acorn_helpers.raw_to_derived.MetadataDbClient")
     @patch("zombie_squirrel.acorn_helpers.raw_to_derived.acorns.TREE")
@@ -83,7 +85,7 @@ class TestRawToDerived(unittest.TestCase):
         mock_client_class.return_value = mock_client_instance
 
         mock_client_instance.retrieve_docdb_records.side_effect = [
-            [{"_id": "raw1"}],  # Raw records
+            [{"_id": "raw1", "name": "raw1_name"}],  # Raw records
             [],  # No derived records
         ]
 
@@ -98,7 +100,7 @@ class TestRawToDerived(unittest.TestCase):
         """Test force_update bypasses cache."""
         cached_df = pd.DataFrame(
             {
-                "_id": ["old_raw"],
+                "name": ["old_raw"],
                 "derived_records": ["old_derived"],
             }
         )
@@ -107,14 +109,14 @@ class TestRawToDerived(unittest.TestCase):
         mock_client_instance = MagicMock()
         mock_client_class.return_value = mock_client_instance
         mock_client_instance.retrieve_docdb_records.side_effect = [
-            [{"_id": "new_raw"}],
+            [{"_id": "new_raw_id", "name": "new_raw"}],
             [],
         ]
 
         result = raw_to_derived(force_update=True)
 
         self.assertEqual(len(result), 1)
-        self.assertEqual(result.iloc[0]["_id"], "new_raw")
+        self.assertEqual(result.iloc[0]["name"], "new_raw")
 
 
 if __name__ == "__main__":

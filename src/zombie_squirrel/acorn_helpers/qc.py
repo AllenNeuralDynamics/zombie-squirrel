@@ -162,7 +162,7 @@ def _filter_by_asset_names(df: pd.DataFrame, asset_names: str | list[str], subje
                 tree=acorns.TREE.__class__.__name__,
                 acorn=acorns.NAMES["qc"],
                 message=f"Requested asset(s) {missing_assets} not found in cache for subject {subject_id}. "
-                        f"Available assets: {available_assets}",
+                f"Available assets: {available_assets}",
             ).to_json()
         )
 
