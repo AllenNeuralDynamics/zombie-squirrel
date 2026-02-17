@@ -11,6 +11,7 @@ from zombie_squirrel.utils import SquirrelMessage, setup_logging
 
 
 def encode_dict_value(value):
+    """Encode dict or list values as JSON strings with a prefix for DataFrame storage."""
     if isinstance(value, (dict, list)):
         return f"json:{json.dumps(value)}"
     if value is not None and not isinstance(value, str):
@@ -19,6 +20,7 @@ def encode_dict_value(value):
 
 
 def decode_dict_value(value):
+    """Decode JSON strings with prefix back to dict or list."""
     if isinstance(value, str) and value.startswith("json:"):
         return json.loads(value[5:])
     return value
@@ -162,7 +164,7 @@ def _filter_by_asset_names(df: pd.DataFrame, asset_names: str | list[str], subje
                 tree=acorns.TREE.__class__.__name__,
                 acorn=acorns.NAMES["qc"],
                 message=f"Requested asset(s) {missing_assets} not found in cache for subject {subject_id}. "
-                        f"Available assets: {available_assets}",
+                f"Available assets: {available_assets}",
             ).to_json()
         )
 

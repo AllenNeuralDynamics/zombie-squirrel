@@ -11,13 +11,13 @@ def hide_acorns():
     # Update simple acorns
     ACORN_REGISTRY[NAMES["upn"]](force_update=True)
     ACORN_REGISTRY[NAMES["usi"]](force_update=True)
-    
+
     # Update asset_basics and get subject IDs for QC
     df_basics = ACORN_REGISTRY[NAMES["basics"]](force_update=True)
-    
+
     ACORN_REGISTRY[NAMES["d2r"]](force_update=True)
     ACORN_REGISTRY[NAMES["r2d"]](force_update=True)
-    
+
     # Update QC for each subject
     subject_ids = df_basics["subject_id"].dropna().unique()
     qc_acorn = ACORN_REGISTRY[NAMES["qc"]]
