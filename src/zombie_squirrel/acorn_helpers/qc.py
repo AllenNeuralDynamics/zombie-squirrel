@@ -7,7 +7,11 @@ import pandas as pd
 from aind_data_access_api.document_db import MetadataDbClient
 
 import zombie_squirrel.acorns as acorns
-from zombie_squirrel.utils import SquirrelMessage, setup_logging
+from zombie_squirrel.utils import (
+    SquirrelMessage,
+    load_columns_from_metadata,
+    setup_logging,
+)
 
 
 def encode_dict_value(value):
@@ -27,7 +31,12 @@ def decode_dict_value(value):
 
 
 @acorns.register_acorn(acorns.NAMES["qc"])
-def qc(subject_id: str, asset_names: str | list[str] | None = None, force_update: bool = False) -> pd.DataFrame:
+def qc(
+    subject_id: str,
+    asset_names: str | list[str] | None = None,
+    force_update: bool = False,
+    write_metadata: bool = True,
+) -> pd.DataFrame:
     """Fetch quality control metrics for assets belonging to a subject.
 
     Returns a DataFrame with columns from the quality_control metrics
@@ -43,6 +52,8 @@ def qc(subject_id: str, asset_names: str | list[str] | None = None, force_update
         asset_names: Optional asset name or list of asset names to filter to.
                     If None, returns QC data for all assets of the subject.
         force_update: If True, bypass cache and fetch fresh data from database.
+        write_metadata: If True, write metadata JSON with column names when caching.
+                       Default True. Set to False to skip metadata writes on subsequent calls.
 
     Returns:
         DataFrame with quality control metrics for the subject's asset(s).
@@ -62,7 +73,7 @@ def qc(subject_id: str, asset_names: str | list[str] | None = None, force_update
         )
 
     if force_update:
-        df = _fetch_subject_qc(subject_id)
+        df = _fetch_subject_qc(subject_id, write_metadata=write_metadata)
 
     if asset_names is not None:
         df = _filter_by_asset_names(df, asset_names, subject_id)
@@ -70,8 +81,13 @@ def qc(subject_id: str, asset_names: str | list[str] | None = None, force_update
     return df
 
 
-def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
-    """Fetch QC data for all assets belonging to a subject."""
+def _fetch_subject_qc(subject_id: str, write_metadata: bool = True) -> pd.DataFrame:
+    """Fetch QC data for all assets belonging to a subject.
+
+    Args:
+        subject_id: Subject ID to fetch QC data for.
+        write_metadata: If True, write metadata JSON with column names when caching.
+    """
     setup_logging()
     cache_key = f"qc/{subject_id}"
 
@@ -108,6 +124,20 @@ def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
         )
         return pd.DataFrame()
 
+    # Define explicit columns to extract from QC metrics
+    qc_columns = [
+        "object_type",
+        "name",
+        "modality",
+        "stage",
+        "value",
+        "status_history",
+        "description",
+        "reference",
+        "tags",
+        "evaluated_assets",
+    ]
+
     all_metrics = []
     for record in records:
         asset_name = record.get("name", "")
@@ -117,11 +147,12 @@ def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
             continue
 
         for metric in quality_control["metrics"]:
-            metric_copy = metric.copy()
-            for key, value in metric_copy.items():
-                metric_copy[key] = encode_dict_value(value)
-            metric_copy["asset_name"] = asset_name
-            all_metrics.append(metric_copy)
+            metric_data = {}
+            for col in qc_columns:
+                value = metric.get(col, None)
+                metric_data[col] = encode_dict_value(value)
+            metric_data["asset_name"] = asset_name
+            all_metrics.append(metric_data)
 
     if not all_metrics:
         logging.warning(
@@ -134,7 +165,7 @@ def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
         return pd.DataFrame()
 
     df = pd.DataFrame.from_records(all_metrics)
-    acorns.TREE.hide(cache_key, df)
+    acorns.TREE.hide(cache_key, df, write_metadata=write_metadata)
 
     logging.info(
         SquirrelMessage(
@@ -169,3 +200,11 @@ def _filter_by_asset_names(df: pd.DataFrame, asset_names: str | list[str], subje
         )
 
     return df[df["asset_name"].isin(asset_names)].reset_index(drop=True)
+
+
+def qc_columns() -> list[str]:
+    """Get column names from quality control metadata.
+
+    Returns:
+        List of column names from the cached metadata."""
+    return load_columns_from_metadata(acorns.NAMES["qc"])

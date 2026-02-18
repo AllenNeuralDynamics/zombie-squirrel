@@ -1,6 +1,7 @@
 """Storage backend interfaces for caching data."""
 
 import io
+import json
 import logging
 from abc import ABC, abstractmethod
 
@@ -19,8 +20,14 @@ class Tree(ABC):
         super().__init__()
 
     @abstractmethod
-    def hide(self, table_name: str, data: pd.DataFrame) -> None:
-        """Store records in the cache."""
+    def hide(self, table_name: str, data: pd.DataFrame, write_metadata: bool = True) -> None:
+        """Store records in the cache.
+
+        Args:
+            table_name: Name of the table to cache.
+            data: DataFrame to cache.
+            write_metadata: If True, write metadata JSON with column names. Default True.
+        """
         pass  # pragma: no cover
 
     @abstractmethod
@@ -43,8 +50,14 @@ class S3Tree(Tree):
         self.bucket = "aind-scratch-data"
         self.s3_client = boto3.client("s3")
 
-    def hide(self, table_name: str, data: pd.DataFrame) -> None:
-        """Store DataFrame as parquet file in S3."""
+    def hide(self, table_name: str, data: pd.DataFrame, write_metadata: bool = True) -> None:
+        """Store DataFrame as parquet file in S3.
+
+        Args:
+            table_name: Name of the table to cache.
+            data: DataFrame to cache.
+            write_metadata: If True, write metadata JSON with column names. Default True.
+        """
         filename = prefix_table_name(table_name)
         s3_key = get_s3_cache_path(filename)
 
@@ -64,6 +77,9 @@ class S3Tree(Tree):
                 tree="S3Tree", acorn=table_name, message=f"Stored cache to s3://{self.bucket}/{s3_key}"
             ).to_json()
         )
+
+        if write_metadata:
+            self._write_metadata_json(table_name, data)
 
     def scurry(self, table_name: str | list[str]) -> pd.DataFrame:
         """Fetch DataFrame from S3 parquet file(s).
@@ -133,6 +149,31 @@ class S3Tree(Tree):
             )
             return pd.DataFrame()
 
+    def _write_metadata_json(self, table_name: str, data: pd.DataFrame) -> None:
+        """Write metadata JSON file with DataFrame column names."""
+        # For QC tables (qc/* pattern), write to top-level zs_qc.json
+        if table_name.startswith("qc/"):
+            json_filename = "zs_qc.json"
+        else:
+            base_name = prefix_table_name(table_name)
+            json_filename = base_name.replace(".pqt", ".json")
+
+        json_key = get_s3_cache_path(json_filename)
+        metadata = {"columns": data.columns.tolist()}
+
+        self.s3_client.put_object(
+            Bucket=self.bucket,
+            Key=json_key,
+            Body=json.dumps(metadata, indent=2),
+        )
+        logging.info(
+            SquirrelMessage(
+                tree="S3Tree",
+                acorn=table_name,
+                message=f"Stored metadata to s3://{self.bucket}/{json_key}",
+            ).to_json()
+        )
+
 
 class MemoryTree(Tree):
     """A simple in-memory backend for testing or local development."""
@@ -142,14 +183,23 @@ class MemoryTree(Tree):
         super().__init__()
         self._store: dict[str, pd.DataFrame] = {}
 
-    def hide(self, table_name: str, data: pd.DataFrame) -> None:
-        """Store DataFrame in memory."""
+    def hide(self, table_name: str, data: pd.DataFrame, write_metadata: bool = True) -> None:
+        """Store DataFrame in memory.
+
+        Args:
+            table_name: Name of the table to cache.
+            data: DataFrame to cache.
+            write_metadata: If True, write metadata JSON with column names. Default True.
+        """
         logging.info(
             SquirrelMessage(
                 tree="MemoryTree", acorn=table_name, message=f"Storing cache in memory for {table_name}"
             ).to_json()
         )
         self._store[table_name] = data
+
+        if write_metadata:
+            self._write_metadata_json(table_name, data)
 
     def scurry(self, table_name: str | list[str]) -> pd.DataFrame:
         """Fetch DataFrame from memory.
@@ -195,3 +245,20 @@ class MemoryTree(Tree):
             ).to_json()
         )
         return result
+
+    def _write_metadata_json(self, table_name: str, data: pd.DataFrame) -> None:
+        """Write metadata JSON (no-op for MemoryTree)."""
+        # For MemoryTree, we don't write to disk
+        if table_name.startswith("qc/"):
+            json_filename = "zs_qc.json"
+        else:
+            base_name = prefix_table_name(table_name)
+            json_filename = base_name.replace(".pqt", ".json")
+
+        logging.info(
+            SquirrelMessage(
+                tree="MemoryTree",
+                acorn=table_name,
+                message=f"Metadata would be stored as {json_filename}",
+            ).to_json()
+        )

@@ -6,7 +6,11 @@ import pandas as pd
 from aind_data_access_api.document_db import MetadataDbClient
 
 import zombie_squirrel.acorns as acorns
-from zombie_squirrel.utils import SquirrelMessage, setup_logging
+from zombie_squirrel.utils import (
+    SquirrelMessage,
+    load_columns_from_metadata,
+    setup_logging,
+)
 
 
 @acorns.register_acorn(acorns.NAMES["upn"])
@@ -47,3 +51,11 @@ def unique_project_names(force_update: bool = False) -> list[str]:
         acorns.TREE.hide(acorns.NAMES["upn"], df)
 
     return df["project_name"].tolist()
+
+
+def unique_project_names_columns() -> list[str]:
+    """Get column names from unique project names metadata.
+
+    Returns:
+        List of column names from the cached metadata."""
+    return load_columns_from_metadata(acorns.NAMES["upn"])

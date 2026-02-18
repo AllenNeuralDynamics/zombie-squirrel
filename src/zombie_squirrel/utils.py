@@ -1,7 +1,9 @@
 """Utility functions for zombie-squirrel package."""
 
+import json
 import logging
 
+import boto3
 from pydantic import BaseModel
 
 
@@ -45,3 +47,30 @@ def get_s3_cache_path(filename: str) -> str:
     Returns:
         Full S3 path: application-caches/filename"""
     return f"application-caches/{filename}"
+
+
+def load_columns_from_metadata(table_name: str) -> list[str]:
+    """Load column names from metadata JSON file.
+
+    Args:
+        table_name: The table name (e.g., "unique_project_names").
+
+    Returns:
+        List of column names from the metadata JSON file.
+
+    Raises:
+        FileNotFoundError: If metadata file not found in S3."""
+    if table_name.startswith("qc"):
+        json_filename = "zs_qc.json"
+    else:
+        base_name = prefix_table_name(table_name)
+        json_filename = base_name.replace(".pqt", ".json")
+
+    json_key = get_s3_cache_path(json_filename)
+
+    s3_client = boto3.client("s3")
+    bucket = "aind-scratch-data"
+
+    response = s3_client.get_object(Bucket=bucket, Key=json_key)
+    metadata = json.loads(response["Body"].read())
+    return metadata["columns"]

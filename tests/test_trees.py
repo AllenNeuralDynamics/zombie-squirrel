@@ -164,11 +164,36 @@ class TestS3Tree(unittest.TestCase):
 
         acorn.hide("test_table", df)
 
-        mock_s3_client.put_object.assert_called_once()
-        call_kwargs = mock_s3_client.put_object.call_args[1]
-        self.assertEqual(call_kwargs["Bucket"], "aind-scratch-data")
-        self.assertEqual(call_kwargs["Key"], "application-caches/zs_test_table.pqt")
-        self.assertIsInstance(call_kwargs["Body"], bytes)
+        self.assertEqual(mock_s3_client.put_object.call_count, 2)
+
+        parquet_call = mock_s3_client.put_object.call_args_list[0][1]
+        self.assertEqual(parquet_call["Bucket"], "aind-scratch-data")
+        self.assertEqual(parquet_call["Key"], "application-caches/zs_test_table.pqt")
+        self.assertIsInstance(parquet_call["Body"], bytes)
+
+        json_call = mock_s3_client.put_object.call_args_list[1][1]
+        self.assertEqual(json_call["Bucket"], "aind-scratch-data")
+        self.assertEqual(json_call["Key"], "application-caches/zs_test_table.json")
+        self.assertIn("columns", json_call["Body"])
+
+    @patch("zombie_squirrel.forest.boto3.client")
+    def test_s3_hide_qc_metadata(self, mock_boto3_client):
+        """Test S3Tree.hide writes QC metadata to zs_qc.json."""
+        mock_s3_client = MagicMock()
+        mock_boto3_client.return_value = mock_s3_client
+
+        acorn = S3Tree()
+        df = pd.DataFrame({"metric": ["value1", "value2"]})
+
+        acorn.hide("qc/subject123", df)
+
+        self.assertEqual(mock_s3_client.put_object.call_count, 2)
+
+        json_call = mock_s3_client.put_object.call_args_list[1][1]
+        self.assertEqual(json_call["Bucket"], "aind-scratch-data")
+        self.assertEqual(json_call["Key"], "application-caches/zs_qc.json")
+        self.assertIn("columns", json_call["Body"])
+        self.assertIn("metric", json_call["Body"])
 
     @patch("zombie_squirrel.forest.duckdb.query")
     @patch("zombie_squirrel.forest.boto3.client")

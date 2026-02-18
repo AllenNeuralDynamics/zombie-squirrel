@@ -21,5 +21,6 @@ def hide_acorns():
     # Update QC for each subject
     subject_ids = df_basics["subject_id"].dropna().unique()
     qc_acorn = ACORN_REGISTRY[NAMES["qc"]]
-    for subject_id in subject_ids:
-        qc_acorn(subject_id=subject_id, force_update=True)
+    for i, subject_id in enumerate(subject_ids):
+        write_metadata = i == 0
+        qc_acorn(subject_id=subject_id, force_update=True, write_metadata=write_metadata)

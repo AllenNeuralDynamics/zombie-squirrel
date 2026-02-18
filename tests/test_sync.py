@@ -44,8 +44,8 @@ class TestHideAcorns(unittest.TestCase):
         mock_d2r.assert_called_once_with(force_update=True)
         mock_r2d.assert_called_once_with(force_update=True)
         assert mock_qc.call_count == 2
-        mock_qc.assert_any_call(subject_id="subject1", force_update=True)
-        mock_qc.assert_any_call(subject_id="subject2", force_update=True)
+        mock_qc.assert_any_call(subject_id="subject1", force_update=True, write_metadata=True)
+        mock_qc.assert_any_call(subject_id="subject2", force_update=True, write_metadata=False)
 
     @patch("zombie_squirrel.sync.ACORN_REGISTRY")
     def test_hide_acorns_empty_registry(self, mock_registry):
@@ -104,7 +104,7 @@ class TestHideAcorns(unittest.TestCase):
 
         hide_acorns()
 
-        mock_qc.assert_called_once_with(subject_id="subject1", force_update=True)
+        mock_qc.assert_called_once_with(subject_id="subject1", force_update=True, write_metadata=True)
 
     @patch("zombie_squirrel.sync.ACORN_REGISTRY")
     def test_hide_acorns_acorn_order_independent(self, mock_registry):
@@ -132,8 +132,9 @@ class TestHideAcorns(unittest.TestCase):
         hide_acorns()
 
         assert mock_qc.call_count == 5
-        for sub_id in ["sub1", "sub2", "sub3", "sub4", "sub5"]:
-            mock_qc.assert_any_call(subject_id=sub_id, force_update=True)
+        mock_qc.assert_any_call(subject_id="sub1", force_update=True, write_metadata=True)
+        for sub_id in ["sub2", "sub3", "sub4", "sub5"]:
+            mock_qc.assert_any_call(subject_id=sub_id, force_update=True, write_metadata=False)
 
     @patch("zombie_squirrel.sync.ACORN_REGISTRY")
     def test_hide_acorns_propagates_exceptions(self, mock_registry):
