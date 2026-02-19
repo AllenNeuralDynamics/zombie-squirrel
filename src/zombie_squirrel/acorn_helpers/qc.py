@@ -37,7 +37,8 @@ def qc(
     asset_names: str | list[str] | None = None,
     force_update: bool = False,
     write_metadata: bool = True,
-) -> pd.DataFrame:
+    lazy: bool = False,
+) -> pd.DataFrame | str:
     """Fetch quality control metrics for assets belonging to a subject.
 
     Returns a DataFrame with columns from the quality_control metrics
@@ -57,13 +58,22 @@ def qc(
         force_update: If True, bypass cache and fetch fresh data from database.
         write_metadata: If True, write metadata JSON with column names when caching.
                        Default True. Set to False to skip metadata writes on subsequent calls.
+        lazy: If True, return the S3 path to the parquet file instead of loading the DataFrame.
+              Default False. Path format is suitable for use with DuckDB.
 
     Returns:
-        DataFrame with quality control metrics for the subject's asset(s).
+        DataFrame with quality control metrics for the subject's asset(s), or
+        string path to the S3 parquet file if lazy=True.
 
     Raises:
         ValueError: If requested asset_names are not found in the subject's cache."""
     cache_key = f"qc/{subject_id}"
+    
+    if lazy:
+        if force_update:
+            _fetch_subject_qc(subject_id, write_metadata=write_metadata)
+        return acorns.TREE.get_path(cache_key)
+    
     df = acorns.TREE.scurry(cache_key)
 
     if df.empty and not force_update:

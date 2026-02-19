@@ -41,6 +41,18 @@ class Tree(ABC):
         """
         pass  # pragma: no cover
 
+    @abstractmethod
+    def get_path(self, table_name: str) -> str:
+        """Get the path/URI to the cached data.
+
+        Args:
+            table_name: Name of the table.
+
+        Returns:
+            String path or URI to the cached data.
+        """
+        pass  # pragma: no cover
+
 
 class S3Tree(Tree):
     """Stores and retrieves caches using AWS S3 with parquet files."""
@@ -149,6 +161,19 @@ class S3Tree(Tree):
             )
             return pd.DataFrame()
 
+    def get_path(self, table_name: str) -> str:
+        """Get the S3 URI to the cached parquet file.
+
+        Args:
+            table_name: Name of the table.
+
+        Returns:
+            S3 URI string (e.g., 's3://bucket/path/file.pqt').
+        """
+        filename = prefix_table_name(table_name)
+        s3_key = get_s3_cache_path(filename)
+        return f"s3://{self.bucket}/{s3_key}"
+
     def _write_metadata_json(self, table_name: str, data: pd.DataFrame) -> None:
         """Write metadata JSON file with DataFrame column names."""
         # For QC tables (qc/* pattern), write to top-level zs_qc.json
@@ -245,6 +270,17 @@ class MemoryTree(Tree):
             ).to_json()
         )
         return result
+
+    def get_path(self, table_name: str) -> str:
+        """Get the memory location identifier.
+
+        Args:
+            table_name: Name of the table.
+
+        Returns:
+            Memory identifier string.
+        """
+        return f"memory://{table_name}"
 
     def _write_metadata_json(self, table_name: str, data: pd.DataFrame) -> None:
         """Write metadata JSON (no-op for MemoryTree)."""
