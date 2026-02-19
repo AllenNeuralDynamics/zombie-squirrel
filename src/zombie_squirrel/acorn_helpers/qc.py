@@ -1,6 +1,5 @@
 """Quality control data acorn."""
 
-import json
 import logging
 from datetime import datetime
 
@@ -15,22 +14,6 @@ from zombie_squirrel.utils import (
 )
 
 
-def encode_dict_value(value):
-    """Encode dict or list values as JSON strings with a prefix for DataFrame storage."""
-    if isinstance(value, (dict, list)):
-        return f"json:{json.dumps(value)}"
-    if value is not None and not isinstance(value, str):
-        return str(value)
-    return value
-
-
-def decode_dict_value(value):
-    """Decode JSON strings with prefix back to dict or list."""
-    if isinstance(value, str) and value.startswith("json:"):
-        return json.loads(value[5:])
-    return value
-
-
 @acorns.register_acorn(acorns.NAMES["qc"])
 def qc(
     subject_id: str,
@@ -43,9 +26,10 @@ def qc(
 
     Returns a DataFrame with columns from the quality_control metrics
     including: name, stage, object_type, modality, value, tags, status,
-    status_history, asset_name, subject_id, and timestamp. Dict values 
-    are stored as JSON strings with 'json:' prefix for cleaner dataframe 
-    storage. Timestamp is the unix timestamp (seconds since epoch) from 
+    status_history, asset_name, subject_id, and timestamp. Special handling:
+    - modality: extracts the "abbreviation" field from the dict
+    - status_history: takes the last element and extracts the "status" field
+    Timestamp is the unix timestamp (seconds since epoch) from 
     acquisition.acquisition_start_time.
 
     Data is cached per subject_id. All assets for the subject are stored
@@ -178,7 +162,14 @@ def _fetch_subject_qc(subject_id: str, write_metadata: bool = True) -> pd.DataFr
             metric_data = {}
             for col in qc_columns:
                 value = metric.get(col, None)
-                metric_data[col] = encode_dict_value(value)
+                
+                # Special handling for specific fields
+                if col == "modality" and isinstance(value, dict):
+                    value = value.get("abbreviation", None)
+                elif col == "status_history" and isinstance(value, list) and len(value) > 0:
+                    value = value[-1].get("status", None) if isinstance(value[-1], dict) else None
+                
+                metric_data[col] = value
             metric_data["asset_name"] = asset_name
             metric_data["subject_id"] = subject_id_value
             metric_data["timestamp"] = timestamp
