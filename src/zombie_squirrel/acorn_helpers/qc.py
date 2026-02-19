@@ -2,6 +2,7 @@
 
 import json
 import logging
+from datetime import datetime
 
 import pandas as pd
 from aind_data_access_api.document_db import MetadataDbClient
@@ -41,8 +42,10 @@ def qc(
 
     Returns a DataFrame with columns from the quality_control metrics
     including: name, stage, object_type, modality, value, tags, status,
-    status_history, and asset_name. Dict values are stored as JSON strings
-    with 'json:' prefix for cleaner dataframe storage.
+    status_history, asset_name, subject_id, and timestamp. Dict values 
+    are stored as JSON strings with 'json:' prefix for cleaner dataframe 
+    storage. Timestamp is the unix timestamp (seconds since epoch) from 
+    acquisition.acquisition_start_time.
 
     Data is cached per subject_id. All assets for the subject are stored
     in cache, but can be filtered using the asset_names parameter.
@@ -110,6 +113,8 @@ def _fetch_subject_qc(subject_id: str, write_metadata: bool = True) -> pd.DataFr
             "_id": 1,
             "name": 1,
             "quality_control": 1,
+            "acquisition.acquisition_start_time": 1,
+            "subject.subject_id": 1,
         },
         limit=100,
     )
@@ -142,6 +147,19 @@ def _fetch_subject_qc(subject_id: str, write_metadata: bool = True) -> pd.DataFr
     for record in records:
         asset_name = record.get("name", "")
         quality_control = record.get("quality_control", {})
+        acquisition = record.get("acquisition", {})
+        subject = record.get("subject", {})
+        
+        subject_id_value = subject.get("subject_id", "")
+        
+        acquisition_start_time = acquisition.get("acquisition_start_time", None)
+        timestamp = None
+        if acquisition_start_time:
+            try:
+                dt = datetime.fromisoformat(acquisition_start_time.replace("Z", "+00:00"))
+                timestamp = int(dt.timestamp())
+            except (ValueError, AttributeError):
+                timestamp = None
 
         if not quality_control or "metrics" not in quality_control:
             continue
@@ -152,6 +170,8 @@ def _fetch_subject_qc(subject_id: str, write_metadata: bool = True) -> pd.DataFr
                 value = metric.get(col, None)
                 metric_data[col] = encode_dict_value(value)
             metric_data["asset_name"] = asset_name
+            metric_data["subject_id"] = subject_id_value
+            metric_data["timestamp"] = timestamp
             all_metrics.append(metric_data)
 
     if not all_metrics:
