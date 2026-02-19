@@ -60,11 +60,8 @@ def load_columns_from_metadata(table_name: str) -> list[str]:
 
     Raises:
         FileNotFoundError: If metadata file not found in S3."""
-    if table_name.startswith("qc"):
-        json_filename = "zs_qc.json"
-    else:
-        base_name = prefix_table_name(table_name)
-        json_filename = base_name.replace(".pqt", ".json")
+    base_name = prefix_table_name(table_name)
+    json_filename = base_name.replace(".pqt", ".json")
 
     json_key = get_s3_cache_path(json_filename)
 

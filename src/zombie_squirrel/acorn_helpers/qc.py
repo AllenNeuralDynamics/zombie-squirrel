@@ -207,4 +207,4 @@ def qc_columns() -> list[str]:
 
     Returns:
         List of column names from the cached metadata."""
-    return load_columns_from_metadata(acorns.NAMES["qc"])
+    return load_columns_from_metadata("qc")
