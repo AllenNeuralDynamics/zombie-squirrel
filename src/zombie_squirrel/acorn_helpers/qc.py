@@ -9,7 +9,6 @@ from aind_data_access_api.document_db import MetadataDbClient
 import zombie_squirrel.acorns as acorns
 from zombie_squirrel.utils import (
     SquirrelMessage,
-    load_columns_from_metadata,
     setup_logging,
 )
 
@@ -19,7 +18,6 @@ def qc(
     subject_id: str,
     asset_names: str | list[str] | None = None,
     force_update: bool = False,
-    write_metadata: bool = True,
     lazy: bool = False,
 ) -> pd.DataFrame | str:
     """Fetch quality control metrics for assets belonging to a subject.
@@ -40,8 +38,6 @@ def qc(
         asset_names: Optional asset name or list of asset names to filter to.
                     If None, returns QC data for all assets of the subject.
         force_update: If True, bypass cache and fetch fresh data from database.
-        write_metadata: If True, write metadata JSON with column names when caching.
-                       Default True. Set to False to skip metadata writes on subsequent calls.
         lazy: If True, return the S3 path to the parquet file instead of loading the DataFrame.
               Default False. Path format is suitable for use with DuckDB.
 
@@ -55,8 +51,8 @@ def qc(
     
     if lazy:
         if force_update:
-            _fetch_subject_qc(subject_id, write_metadata=write_metadata)
-        return acorns.TREE.get_path(cache_key)
+            _fetch_subject_qc(subject_id)
+        return acorns.TREE.get_location(cache_key)
     
     df = acorns.TREE.scurry(cache_key)
 
@@ -70,7 +66,7 @@ def qc(
         )
 
     if force_update:
-        df = _fetch_subject_qc(subject_id, write_metadata=write_metadata)
+        df = _fetch_subject_qc(subject_id)
 
     if asset_names is not None:
         df = _filter_by_asset_names(df, asset_names, subject_id)
@@ -78,13 +74,7 @@ def qc(
     return df
 
 
-def _fetch_subject_qc(subject_id: str, write_metadata: bool = True) -> pd.DataFrame:
-    """Fetch QC data for all assets belonging to a subject.
-
-    Args:
-        subject_id: Subject ID to fetch QC data for.
-        write_metadata: If True, write metadata JSON with column names when caching.
-    """
+def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
     setup_logging()
     cache_key = f"qc/{subject_id}"
 
@@ -123,8 +113,7 @@ def _fetch_subject_qc(subject_id: str, write_metadata: bool = True) -> pd.DataFr
         )
         return pd.DataFrame()
 
-    # Define explicit columns to extract from QC metrics
-    qc_columns = [
+    _qc_fields = [
         "object_type",
         "name",
         "modality",
@@ -160,7 +149,7 @@ def _fetch_subject_qc(subject_id: str, write_metadata: bool = True) -> pd.DataFr
 
         for metric in quality_control["metrics"]:
             metric_data = {}
-            for col in qc_columns:
+            for col in _qc_fields:
                 value = metric.get(col, None)
                 
                 # Special handling for specific fields
@@ -186,7 +175,7 @@ def _fetch_subject_qc(subject_id: str, write_metadata: bool = True) -> pd.DataFr
         return pd.DataFrame()
 
     df = pd.DataFrame.from_records(all_metrics)
-    acorns.TREE.hide(cache_key, df, write_metadata=write_metadata)
+    acorns.TREE.hide(cache_key, df)
 
     logging.info(
         SquirrelMessage(
@@ -197,6 +186,10 @@ def _fetch_subject_qc(subject_id: str, write_metadata: bool = True) -> pd.DataFr
     )
 
     return df
+
+
+def qc_columns() -> list[str]:
+    return ["name", "stage", "object_type", "modality", "value", "tags", "status", "status_history", "asset_name"]
 
 
 def _filter_by_asset_names(df: pd.DataFrame, asset_names: str | list[str], subject_id: str) -> pd.DataFrame:
@@ -223,9 +216,3 @@ def _filter_by_asset_names(df: pd.DataFrame, asset_names: str | list[str], subje
     return df[df["asset_name"].isin(asset_names)].reset_index(drop=True)
 
 
-def qc_columns() -> list[str]:
-    """Get column names from quality control metadata.
-
-    Returns:
-        List of column names from the cached metadata."""
-    return load_columns_from_metadata("qc")

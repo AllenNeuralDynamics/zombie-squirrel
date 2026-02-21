@@ -8,7 +8,6 @@ from aind_data_access_api.document_db import MetadataDbClient
 import zombie_squirrel.acorns as acorns
 from zombie_squirrel.utils import (
     SquirrelMessage,
-    load_columns_from_metadata,
     setup_logging,
 )
 
@@ -158,8 +157,18 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
 
 
 def asset_basics_columns() -> list[str]:
-    """Get column names from asset basics metadata.
-
-    Returns:
-        List of column names from the cached metadata."""
-    return load_columns_from_metadata(acorns.NAMES["basics"])
+    return [
+        "_id",
+        "_last_modified",
+        "modalities",
+        "project_name",
+        "data_level",
+        "subject_id",
+        "acquisition_start_time",
+        "acquisition_end_time",
+        "code_ocean",
+        "process_date",
+        "genotype",
+        "location",
+        "name",
+    ]
