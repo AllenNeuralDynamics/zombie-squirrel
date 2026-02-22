@@ -1,58 +1,13 @@
 """Unit tests for QC acorn."""
 
-import json
 import unittest
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
 import zombie_squirrel.acorns as acorns
-from zombie_squirrel.acorn_helpers.qc import (
-    decode_dict_value,
-    encode_dict_value,
-    qc,
-)
+from zombie_squirrel.acorn_helpers.qc import qc
 from zombie_squirrel.forest import MemoryTree
-
-
-class TestQCEncodeDecode(unittest.TestCase):
-    """Tests for encode_dict_value and decode_dict_value functions."""
-
-    def test_encode_dict_simple(self):
-        """Test encoding a simple dictionary."""
-        test_dict = {"key": "value"}
-        encoded = encode_dict_value(test_dict)
-        self.assertEqual(encoded, 'json:{"key": "value"}')
-
-    def test_encode_dict_nested(self):
-        """Test encoding a nested dictionary."""
-        test_dict = {"outer": {"inner": "value"}}
-        encoded = encode_dict_value(test_dict)
-        decoded = json.loads(encoded[5:])
-        self.assertEqual(decoded, test_dict)
-
-    def test_encode_non_dict(self):
-        """Test that non-dict values are returned as-is."""
-        result = encode_dict_value("string_value")
-        self.assertEqual(result, "string_value")
-
-    def test_decode_dict(self):
-        """Test decoding a JSON-encoded dictionary string."""
-        encoded = 'json:{"key": "value"}'
-        decoded = decode_dict_value(encoded)
-        self.assertEqual(decoded, {"key": "value"})
-
-    def test_decode_non_prefixed_string(self):
-        """Test that non-prefixed strings are returned as-is."""
-        result = decode_dict_value("not_prefixed")
-        self.assertEqual(result, "not_prefixed")
-
-    def test_encode_decode_roundtrip(self):
-        """Test that encoding and then decoding returns the original dictionary."""
-        original = {"status": "pass", "nested": {"count": 42}}
-        encoded = encode_dict_value(original)
-        decoded = decode_dict_value(encoded)
-        self.assertEqual(original, decoded)
 
 
 class TestQCMemoryTree(unittest.TestCase):
@@ -120,10 +75,7 @@ class TestQCMemoryTree(unittest.TestCase):
         self.assertEqual(len(df), 2)
         self.assertEqual(df.iloc[0]["name"], "Test Metric 1")
         self.assertEqual(df.iloc[1]["name"], "Test Metric 2")
-
-        encoded_value = df.iloc[0]["value"]
-        decoded_value = decode_dict_value(encoded_value)
-        self.assertEqual(decoded_value["value"], "pass")
+        self.assertEqual(df.iloc[0]["value"], "{dict}")
 
     @patch("zombie_squirrel.acorn_helpers.qc.MetadataDbClient")
     def test_qc_cache_hit(self, mock_client_class):
@@ -132,11 +84,7 @@ class TestQCMemoryTree(unittest.TestCase):
             {
                 "name": ["Metric 1", "Metric 2"],
                 "stage": ["Processing", "Acquisition"],
-                "value": [
-                    'json:{"value": "pass"}',
-                    'json:{"value": null}',
-                ],
-                "tags": ['json:{"tag1": "val1"}', "json:{}"],
+                "value": ["pass", "{dict}"],
             }
         )
         acorns.TREE.hide("qc/cached-asset", cache_df)
@@ -183,8 +131,8 @@ class TestQCMemoryTree(unittest.TestCase):
         self.assertTrue(df.empty)
 
     @patch("zombie_squirrel.acorn_helpers.qc.MetadataDbClient")
-    def test_qc_tags_and_value_encoding(self, mock_client_class):
-        """Test that dict values and tags are properly encoded."""
+    def test_qc_dict_value_replaced_and_no_tags_column(self, mock_client_class):
+        """Test that dict values are replaced with {dict} and tags column is absent."""
         mock_client_instance = MagicMock()
         mock_client_class.return_value = mock_client_instance
 
@@ -213,15 +161,8 @@ class TestQCMemoryTree(unittest.TestCase):
 
         df = qc("test-asset", force_update=True)
 
-        value_str = df.iloc[0]["value"]
-        self.assertTrue(value_str.startswith("json:"))
-        decoded_value = decode_dict_value(value_str)
-        self.assertEqual(decoded_value["nested"]["deep"], "value")
-
-        tags_str = df.iloc[0]["tags"]
-        self.assertTrue(tags_str.startswith("json:"))
-        decoded_tags = decode_dict_value(tags_str)
-        self.assertEqual(decoded_tags["key1"], "val1")
+        self.assertEqual(df.iloc[0]["value"], "{dict}")
+        self.assertNotIn("tags", df.columns)
 
     @patch("zombie_squirrel.acorn_helpers.qc.MetadataDbClient")
     def test_qc_cache_persistence(self, mock_client_class):
@@ -317,16 +258,14 @@ class TestQCMemoryTree(unittest.TestCase):
             {
                 "name": ["Metric 1"],
                 "stage": ["Processing"],
-                "value": ['json:{"value": "pass"}'],
-                "tags": ["json:{}"],
+                "value": ["pass"],
             }
         )
         cache_df2 = pd.DataFrame(
             {
                 "name": ["Metric 2"],
                 "stage": ["Acquisition"],
-                "value": ['json:{"value": "fail"}'],
-                "tags": ["json:{}"],
+                "value": ["fail"],
             }
         )
         # Combine both dataframes and cache under a single subject
@@ -347,16 +286,6 @@ class TestQCMemoryTree(unittest.TestCase):
         df = qc("nonexistent-subject", asset_names=["nonexistent1", "nonexistent2"], force_update=False)
 
         self.assertTrue(df.empty)
-
-    def test_encode_dict_value_plain_values(self):
-        """Test encode_dict_value with None and plain string values."""
-        from zombie_squirrel.acorn_helpers.qc import encode_dict_value
-
-        self.assertIsNone(encode_dict_value(None))
-        self.assertEqual(encode_dict_value("plain_string"), "plain_string")
-        self.assertEqual(encode_dict_value(42), "42")
-        self.assertEqual(encode_dict_value(3.14), "3.14")
-        self.assertEqual(encode_dict_value(True), "True")
 
     @patch("zombie_squirrel.acorn_helpers.qc.MetadataDbClient")
     def test_qc_single_asset_name_string(self, mock_client_class):

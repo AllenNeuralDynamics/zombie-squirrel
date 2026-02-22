@@ -23,10 +23,11 @@ def qc(
     """Fetch quality control metrics for assets belonging to a subject.
 
     Returns a DataFrame with columns from the quality_control metrics
-    including: name, stage, object_type, modality, value, tags, status,
+    including: name, stage, object_type, modality, value, status,
     status_history, asset_name, subject_id, and timestamp. Special handling:
     - modality: extracts the "abbreviation" field from the dict
     - status_history: takes the last element and extracts the "status" field
+    - value: if the stored value is a dict, it is replaced with the string "{dict}"
     Timestamp is the unix timestamp (seconds since epoch) from 
     acquisition.acquisition_start_time.
 
@@ -122,7 +123,6 @@ def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
         "status_history",
         "description",
         "reference",
-        "tags",
         "evaluated_assets",
     ]
 
@@ -152,12 +152,13 @@ def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
             for col in _qc_fields:
                 value = metric.get(col, None)
                 
-                # Special handling for specific fields
                 if col == "modality" and isinstance(value, dict):
                     value = value.get("abbreviation", None)
                 elif col == "status_history" and isinstance(value, list) and len(value) > 0:
                     value = value[-1].get("status", None) if isinstance(value[-1], dict) else None
-                
+                elif col == "value" and isinstance(value, dict):
+                    value = "{dict}"
+
                 metric_data[col] = value
             metric_data["asset_name"] = asset_name
             metric_data["subject_id"] = subject_id_value
@@ -189,7 +190,7 @@ def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
 
 
 def qc_columns() -> list[str]:
-    return ["name", "stage", "object_type", "modality", "value", "tags", "status", "status_history", "asset_name"]
+    return ["name", "stage", "object_type", "modality", "value", "status", "status_history", "asset_name"]
 
 
 def _filter_by_asset_names(df: pd.DataFrame, asset_names: str | list[str], subject_id: str) -> pd.DataFrame:
