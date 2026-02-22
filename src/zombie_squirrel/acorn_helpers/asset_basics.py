@@ -8,6 +8,7 @@ from aind_data_access_api.document_db import MetadataDbClient
 import zombie_squirrel.acorns as acorns
 from zombie_squirrel.utils import (
     SquirrelMessage,
+    load_columns_from_metadata,
     setup_logging,
 )
 
@@ -137,8 +138,12 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
                 "project_name": record.get("data_description", {}).get("project_name", None),
                 "data_level": record.get("data_description", {}).get("data_level", None),
                 "subject_id": record.get("subject", {}).get("subject_id", None),
-                "acquisition_start_time": record.get("acquisition", {}).get("acquisition_start_time", None),
-                "acquisition_end_time": record.get("acquisition", {}).get("acquisition_end_time", None),
+                "acquisition_start_time": pd.to_datetime(
+                    record.get("acquisition", {}).get("acquisition_start_time", None), utc=True
+                ),
+                "acquisition_end_time": pd.to_datetime(
+                    record.get("acquisition", {}).get("acquisition_end_time", None), utc=True
+                ),
                 "code_ocean": code_ocean,
                 "process_date": process_date,
                 "genotype": record.get("subject", {}).get("subject_details", {}).get("genotype", None),
@@ -156,19 +161,9 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
     return df
 
 
-def asset_basics_columns() -> list[str]:
-    return [
-        "_id",
-        "_last_modified",
-        "modalities",
-        "project_name",
-        "data_level",
-        "subject_id",
-        "acquisition_start_time",
-        "acquisition_end_time",
-        "code_ocean",
-        "process_date",
-        "genotype",
-        "location",
-        "name",
-    ]
+def asset_basics_columns() -> list:
+    """Return column metadata for the asset_basics table from S3 cache.
+
+    Returns:
+        List of column names for the asset_basics parquet table."""
+    return load_columns_from_metadata(acorns.NAMES["basics"])

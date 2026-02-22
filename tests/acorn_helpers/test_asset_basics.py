@@ -222,5 +222,69 @@ class TestAssetBasics(unittest.TestCase):
         self.assertEqual(result.iloc[0]["code_ocean"], ["df429003-91a0-45d2-8457-66b156ad8bfa"])
 
 
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.MetadataDbClient")
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.acorns.TREE")
+    def test_asset_basics_timestamps_are_timestamptz(self, mock_tree, mock_client_class):
+        """Test that acquisition timestamps are stored as timezone-aware pd.Timestamp."""
+        mock_tree.scurry.return_value = pd.DataFrame()
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "id1",
+                "_last_modified": "2023-01-01",
+                "data_description": {
+                    "modalities": [{"abbreviation": "img"}],
+                    "project_name": "proj1",
+                    "data_level": "raw",
+                },
+                "subject": {"subject_id": "sub001"},
+                "acquisition": {
+                    "acquisition_start_time": "2024-07-09 15:39:33.647972-07:00",
+                    "acquisition_end_time": "2024-07-09 16:39:33.647972-07:00",
+                },
+            }
+        ]
+
+        result = asset_basics(force_update=True)
+
+        self.assertEqual(len(result), 1)
+        start = result.iloc[0]["acquisition_start_time"]
+        end = result.iloc[0]["acquisition_end_time"]
+        self.assertIsInstance(start, pd.Timestamp)
+        self.assertIsInstance(end, pd.Timestamp)
+        self.assertIsNotNone(start.tzinfo)
+        self.assertIsNotNone(end.tzinfo)
+
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.MetadataDbClient")
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.acorns.TREE")
+    def test_asset_basics_timestamps_none_when_missing(self, mock_tree, mock_client_class):
+        """Test that missing acquisition timestamps result in NaT (not an error)."""
+        mock_tree.scurry.return_value = pd.DataFrame()
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "id1",
+                "_last_modified": "2023-01-01",
+                "data_description": {
+                    "modalities": [],
+                    "project_name": "proj1",
+                    "data_level": "raw",
+                },
+                "subject": {"subject_id": "sub001"},
+                "acquisition": {},
+            }
+        ]
+
+        result = asset_basics(force_update=True)
+
+        self.assertEqual(len(result), 1)
+        self.assertTrue(pd.isna(result.iloc[0]["acquisition_start_time"]))
+        self.assertTrue(pd.isna(result.iloc[0]["acquisition_end_time"]))
+
+
 if __name__ == "__main__":
     unittest.main()

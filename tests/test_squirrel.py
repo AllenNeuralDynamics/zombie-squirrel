@@ -2,6 +2,7 @@
 
 import json
 import unittest
+from unittest.mock import MagicMock, patch
 
 from zombie_squirrel.acorn_helpers.asset_basics import asset_basics_columns
 from zombie_squirrel.acorn_helpers.qc import qc_columns
@@ -150,7 +151,25 @@ class TestColumnsHelpers(unittest.TestCase):
         self.assertIsInstance(cols, list)
         self.assertIn("subject_id", cols)
 
-    def test_asset_basics_columns(self):
+    @patch("zombie_squirrel.utils.boto3.client")
+    def test_asset_basics_columns(self, mock_boto3_client):
+        mock_s3 = MagicMock()
+        mock_boto3_client.return_value = mock_s3
+        mock_s3.get_object.return_value = {
+            "Body": MagicMock(
+                read=lambda: json.dumps(
+                    {
+                        "columns": [
+                            "_id",
+                            "_last_modified",
+                            "modalities",
+                            "project_name",
+                            "subject_id",
+                        ]
+                    }
+                ).encode()
+            )
+        }
         cols = asset_basics_columns()
         self.assertIsInstance(cols, list)
         for expected in ("_id", "_last_modified", "subject_id", "modalities", "project_name"):
@@ -162,13 +181,40 @@ class TestColumnsHelpers(unittest.TestCase):
         self.assertIn("_id", cols)
         self.assertIn("source_data", cols)
 
-    def test_raw_to_derived_columns(self):
+    @patch("zombie_squirrel.utils.boto3.client")
+    def test_raw_to_derived_columns(self, mock_boto3_client):
+        mock_s3 = MagicMock()
+        mock_boto3_client.return_value = mock_s3
+        mock_s3.get_object.return_value = {
+            "Body": MagicMock(
+                read=lambda: json.dumps({"columns": ["name", "derived_records"]}).encode()
+            )
+        }
         cols = raw_to_derived_columns()
         self.assertIsInstance(cols, list)
-        self.assertIn("_id", cols)
+        self.assertIn("name", cols)
         self.assertIn("derived_records", cols)
 
-    def test_qc_columns(self):
+    @patch("zombie_squirrel.utils.boto3.client")
+    def test_qc_columns(self, mock_boto3_client):
+        mock_s3 = MagicMock()
+        mock_boto3_client.return_value = mock_s3
+        mock_s3.get_object.return_value = {
+            "Body": MagicMock(
+                read=lambda: json.dumps(
+                    {
+                        "columns": [
+                            "name",
+                            "stage",
+                            "status_history",
+                            "asset_name",
+                            "subject_id",
+                            "timestamp",
+                        ]
+                    }
+                ).encode()
+            )
+        }
         cols = qc_columns()
         self.assertIsInstance(cols, list)
         for expected in ("name", "stage", "status_history", "asset_name", "subject_id", "timestamp"):

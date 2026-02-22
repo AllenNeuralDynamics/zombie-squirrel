@@ -1,7 +1,9 @@
 """Utility functions for zombie-squirrel package."""
 
+import json
 import logging
 
+import boto3
 from pydantic import BaseModel
 
 
@@ -45,3 +47,22 @@ def get_s3_cache_path(filename: str) -> str:
     Returns:
         Full S3 path: application-caches/filename"""
     return f"application-caches/{filename}"
+
+
+def load_columns_from_metadata(table_name: str) -> list:
+    """Load column metadata from S3 for a given table.
+
+    For partitioned tables like qc/{subject_id}, reads from the base table's
+    metadata file (e.g., zs_qc.json).
+
+    Args:
+        table_name: The table name, may include partitions (e.g., "qc/subject123").
+
+    Returns:
+        List of column names from the table's metadata JSON."""
+    base_name = table_name.split("/")[0]
+    key = get_s3_cache_path(f"zs_{base_name}.json")
+    s3 = boto3.client("s3")
+    response = s3.get_object(Bucket="aind-scratch-data", Key=key)
+    data = json.loads(response["Body"].read())
+    return data["columns"]

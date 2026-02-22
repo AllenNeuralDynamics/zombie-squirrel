@@ -1,5 +1,6 @@
 """Quality control data acorn."""
 
+import json
 import logging
 from datetime import datetime
 
@@ -9,8 +10,47 @@ from aind_data_access_api.document_db import MetadataDbClient
 import zombie_squirrel.acorns as acorns
 from zombie_squirrel.utils import (
     SquirrelMessage,
+    load_columns_from_metadata,
     setup_logging,
 )
+
+
+def encode_dict_value(value):
+    """Encode a value for storage in parquet.
+
+    Dicts are serialized as JSON strings with a 'json:' prefix to avoid
+    BLOB type conflicts when DuckDB reads across partitions. None is returned
+    as None. Strings are returned unchanged. Other scalar values are converted
+    to their string representation.
+
+    Args:
+        value: The value to encode.
+
+    Returns:
+        Encoded value safe for parquet string column storage."""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return "json:" + json.dumps(value)
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def decode_dict_value(value):
+    """Decode a value previously encoded by encode_dict_value.
+
+    Strings with a 'json:' prefix are parsed back to their original dict.
+    All other values are returned unchanged.
+
+    Args:
+        value: The encoded value to decode.
+
+    Returns:
+        Original value, with 'json:'-prefixed strings parsed as dicts."""
+    if isinstance(value, str) and value.startswith("json:"):
+        return json.loads(value[5:])
+    return value
 
 
 @acorns.register_acorn(acorns.NAMES["qc"])
@@ -151,13 +191,17 @@ def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
             metric_data = {}
             for col in _qc_fields:
                 value = metric.get(col, None)
-                
+
                 # Special handling for specific fields
                 if col == "modality" and isinstance(value, dict):
                     value = value.get("abbreviation", None)
                 elif col == "status_history" and isinstance(value, list) and len(value) > 0:
                     value = value[-1].get("status", None) if isinstance(value[-1], dict) else None
-                
+                else:
+                    if isinstance(value, bytes):
+                        value = value.decode("utf-8")
+                    value = encode_dict_value(value)
+
                 metric_data[col] = value
             metric_data["asset_name"] = asset_name
             metric_data["subject_id"] = subject_id_value
@@ -188,8 +232,12 @@ def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
     return df
 
 
-def qc_columns() -> list[str]:
-    return ["name", "stage", "object_type", "modality", "value", "tags", "status", "status_history", "asset_name"]
+def qc_columns() -> list:
+    """Return column metadata for the quality_control table from S3 cache.
+
+    Returns:
+        List of column names for the QC parquet table."""
+    return load_columns_from_metadata(acorns.NAMES["qc"])
 
 
 def _filter_by_asset_names(df: pd.DataFrame, asset_names: str | list[str], subject_id: str) -> pd.DataFrame:

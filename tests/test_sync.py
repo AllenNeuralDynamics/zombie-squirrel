@@ -105,6 +105,15 @@ class TestHideAcorns(unittest.TestCase):
 
 
 class TestPublishSquirrelMetadata(unittest.TestCase):
+    def setUp(self):
+        mock_s3 = MagicMock()
+        mock_s3.get_object.return_value = {
+            "Body": MagicMock(read=lambda: json.dumps({"columns": ["col1"]}).encode())
+        }
+        s3_patcher = patch("zombie_squirrel.utils.boto3.client", return_value=mock_s3)
+        s3_patcher.start()
+        self.addCleanup(s3_patcher.stop)
+
     @patch("zombie_squirrel.sync.TREE")
     def test_plant_called_with_squirrel_json_key(self, mock_tree):
         mock_tree.get_location.return_value = "s3://bucket/path"
