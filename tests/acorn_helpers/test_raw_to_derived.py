@@ -1,9 +1,7 @@
-"""Unit tests for raw_to_derived acorn."""
+"""Unit tests for raw_to_derived helper."""
 
-import json
 import unittest
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -11,112 +9,90 @@ from zombie_squirrel.acorn_helpers.raw_to_derived import raw_to_derived
 
 
 class TestRawToDerived(unittest.TestCase):
-    """Tests for raw_to_derived acorn."""
+    """Tests for raw_to_derived helper function."""
 
-    @patch("zombie_squirrel.acorn_helpers.raw_to_derived.MetadataDbClient")
-    @patch("zombie_squirrel.acorn_helpers.raw_to_derived.acorns.TREE")
-    def test_raw_to_derived_cache_hit(self, mock_tree, mock_client_class):
-        """Test returning cached raw to derived mapping."""
-        cached_df = pd.DataFrame(
-            {
-                "name": ["raw1", "raw2"],
-                "derived_records": ["derived1, derived2", "derived3"],
-            }
-        )
-        mock_tree.scurry.return_value = cached_df
+    def _make_df(self, rows):
+        return pd.DataFrame(rows, columns=["name", "source_data", "pipeline_name", "processing_time"])
 
-        result = raw_to_derived(force_update=False)
-
-        self.assertEqual(len(result), 2)
-        self.assertEqual(result.iloc[0]["derived_records"], "derived1, derived2")
-        mock_client_class.assert_not_called()
-
-    @patch("zombie_squirrel.acorn_helpers.raw_to_derived.acorns.TREE")
-    def test_raw_to_derived_empty_cache_raises_error(self, mock_tree):
-        """Test that empty cache raises ValueError without force_update."""
-        mock_tree.scurry.return_value = pd.DataFrame()
-
-        with self.assertRaises(ValueError) as context:
-            raw_to_derived(force_update=False)
-
-        self.assertIn("Cache is empty", str(context.exception))
-        self.assertIn("force_update=True", str(context.exception))
-
-    @patch("zombie_squirrel.acorn_helpers.raw_to_derived.MetadataDbClient")
-    @patch("zombie_squirrel.acorn_helpers.raw_to_derived.acorns.TREE")
-    def test_raw_to_derived_cache_miss(self, mock_tree, mock_client_class):
-        """Test fetching raw to derived mapping when cache is empty using real test records."""
-        mock_tree.scurry.return_value = pd.DataFrame()
-        mock_client_instance = MagicMock()
-        mock_client_class.return_value = mock_client_instance
-
-        resources_path = Path(__file__).parent.parent / "resources"
-        with open(resources_path / "v2_raw.json") as f:
-            raw_record = json.load(f)
-        with open(resources_path / "v2_derived.json") as f:
-            derived_record = json.load(f)
-
-        mock_client_instance.retrieve_docdb_records.side_effect = [
-            [raw_record],
-            [derived_record],
-        ]
-
-        result = raw_to_derived(force_update=True)
-
-        self.assertEqual(len(result), 1)
-        raw_row = result[result["name"] == raw_record["name"]]
-        self.assertEqual(len(raw_row), 1)
-
-        expected_derived_name = derived_record["name"]
-        actual_derived_records = raw_row.iloc[0]["derived_records"]
-
-        self.assertIn(
-            expected_derived_name,
-            actual_derived_records,
-            f"Expected derived record {expected_derived_name} not found in mapping. Got: {actual_derived_records}",
+    @patch("zombie_squirrel.acorn_helpers.raw_to_derived.source_data")
+    def test_returns_matching_derived_names(self, mock_source_data):
+        """Test returns list of derived asset names for a given raw asset."""
+        mock_source_data.return_value = self._make_df(
+            [
+                ("derived_a_2026-01-02_00-00-00", "raw_x", "pipeline_a", "2026-01-02_00-00-00"),
+                ("derived_b_2026-01-03_00-00-00", "raw_x", "pipeline_b", "2026-01-03_00-00-00"),
+                ("derived_c_2026-01-01_00-00-00", "raw_y", "pipeline_a", "2026-01-01_00-00-00"),
+            ]
         )
 
-    @patch("zombie_squirrel.acorn_helpers.raw_to_derived.MetadataDbClient")
-    @patch("zombie_squirrel.acorn_helpers.raw_to_derived.acorns.TREE")
-    def test_raw_to_derived_no_derived(self, mock_tree, mock_client_class):
-        """Test raw records with no derived data."""
-        mock_tree.scurry.return_value = pd.DataFrame()
-        mock_client_instance = MagicMock()
-        mock_client_class.return_value = mock_client_instance
+        result = raw_to_derived("raw_x")
 
-        mock_client_instance.retrieve_docdb_records.side_effect = [
-            [{"_id": "raw1", "name": "raw1_name"}],  # Raw records
-            [],  # No derived records
-        ]
+        self.assertCountEqual(result, ["derived_a_2026-01-02_00-00-00", "derived_b_2026-01-03_00-00-00"])
 
-        result = raw_to_derived(force_update=True)
-
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result.iloc[0]["derived_records"], "")
-
-    @patch("zombie_squirrel.acorn_helpers.raw_to_derived.MetadataDbClient")
-    @patch("zombie_squirrel.acorn_helpers.raw_to_derived.acorns.TREE")
-    def test_raw_to_derived_force_update(self, mock_tree, mock_client_class):
-        """Test force_update bypasses cache."""
-        cached_df = pd.DataFrame(
-            {
-                "name": ["old_raw"],
-                "derived_records": ["old_derived"],
-            }
+    @patch("zombie_squirrel.acorn_helpers.raw_to_derived.source_data")
+    def test_returns_empty_set_no_match(self, mock_source_data):
+        """Test returns empty list when no derived assets exist for the given raw asset."""
+        mock_source_data.return_value = self._make_df(
+            [
+                ("derived_a_2026-01-01_00-00-00", "raw_y", "pipeline_a", "2026-01-01_00-00-00"),
+            ]
         )
-        mock_tree.scurry.return_value = cached_df
 
-        mock_client_instance = MagicMock()
-        mock_client_class.return_value = mock_client_instance
-        mock_client_instance.retrieve_docdb_records.side_effect = [
-            [{"_id": "new_raw_id", "name": "new_raw"}],
-            [],
-        ]
+        result = raw_to_derived("raw_x")
 
-        result = raw_to_derived(force_update=True)
+        self.assertEqual(result, [])
 
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result.iloc[0]["name"], "new_raw")
+    @patch("zombie_squirrel.acorn_helpers.raw_to_derived.source_data")
+    def test_latest_returns_most_recent_per_pipeline(self, mock_source_data):
+        """Test latest=True returns only the most recent derived asset per pipeline."""
+        mock_source_data.return_value = self._make_df(
+            [
+                ("derived_old_2026-01-01_00-00-00", "raw_x", "pipeline_a", "2026-01-01_00-00-00"),
+                ("derived_new_2026-01-03_00-00-00", "raw_x", "pipeline_a", "2026-01-03_00-00-00"),
+                ("derived_b_2026-01-02_00-00-00", "raw_x", "pipeline_b", "2026-01-02_00-00-00"),
+            ]
+        )
+
+        result = raw_to_derived("raw_x", latest=True)
+
+        self.assertCountEqual(result, ["derived_new_2026-01-03_00-00-00", "derived_b_2026-01-02_00-00-00"])
+        self.assertNotIn("derived_old_2026-01-01_00-00-00", result)
+
+    @patch("zombie_squirrel.acorn_helpers.raw_to_derived.source_data")
+    def test_latest_false_returns_all(self, mock_source_data):
+        """Test latest=False (default) returns all derived assets."""
+        mock_source_data.return_value = self._make_df(
+            [
+                ("derived_old_2026-01-01_00-00-00", "raw_x", "pipeline_a", "2026-01-01_00-00-00"),
+                ("derived_new_2026-01-03_00-00-00", "raw_x", "pipeline_a", "2026-01-03_00-00-00"),
+            ]
+        )
+
+        result = raw_to_derived("raw_x", latest=False)
+
+        self.assertCountEqual(result, ["derived_old_2026-01-01_00-00-00", "derived_new_2026-01-03_00-00-00"])
+
+    @patch("zombie_squirrel.acorn_helpers.raw_to_derived.source_data")
+    def test_force_update_passed_through(self, mock_source_data):
+        """Test force_update is passed through to source_data."""
+        mock_source_data.return_value = self._make_df([])
+
+        raw_to_derived("raw_x", force_update=True)
+
+        mock_source_data.assert_called_once_with(force_update=True)
+
+    @patch("zombie_squirrel.acorn_helpers.raw_to_derived.source_data")
+    def test_latest_empty_matches(self, mock_source_data):
+        """Test latest=True with no matches returns empty list."""
+        mock_source_data.return_value = self._make_df(
+            [
+                ("derived_a_2026-01-01_00-00-00", "raw_y", "pipeline_a", "2026-01-01_00-00-00"),
+            ]
+        )
+
+        result = raw_to_derived("raw_x", latest=True)
+
+        self.assertEqual(result, [])
 
 
 if __name__ == "__main__":

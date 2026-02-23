@@ -4,7 +4,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .acorn_helpers.asset_basics import asset_basics_columns
 from .acorn_helpers.qc import qc_columns
-from .acorn_helpers.raw_to_derived import raw_to_derived_columns
 from .acorn_helpers.source_data import source_data_columns
 from .acorn_helpers.unique_project_names import unique_project_names_columns
 from .acorn_helpers.unique_subject_ids import unique_subject_ids_columns
@@ -47,13 +46,6 @@ def publish_squirrel_metadata() -> None:
             columns=source_data_columns(),
         ),
         Acorn(
-            name=NAMES["r2d"],
-            location=TREE.get_location(NAMES["r2d"]),
-            partitioned=False,
-            type=AcornType.metadata,
-            columns=raw_to_derived_columns(),
-        ),
-        Acorn(
             name=NAMES["qc"],
             location=TREE.get_location("qc", partitioned=True),
             partitioned=True,
@@ -79,7 +71,6 @@ def hide_acorns():
     df_basics = ACORN_REGISTRY[NAMES["basics"]](force_update=True)
 
     ACORN_REGISTRY[NAMES["d2r"]](force_update=True)
-    ACORN_REGISTRY[NAMES["r2d"]](force_update=True)
 
     subject_ids = df_basics["subject_id"].dropna().unique()
 
