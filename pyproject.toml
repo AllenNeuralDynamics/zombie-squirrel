@@ -21,10 +21,16 @@ dependencies = [
     'pyarrow',
     'boto3',
     'pandas',
-    'aind-data-access-api[docdb]',
 ]
 
 [dependency-groups]
+data-fetching = [
+    'aind-data-access-api[docdb]',
+]
+spike-sorted = [
+    'zarr',
+    's3fs',
+]
 dev = [
     'ruff',
     'coverage',
@@ -32,6 +38,9 @@ dev = [
     'Sphinx',
     'furo',
     'pre-commit',
+    'aind-data-access-api[docdb]',
+    'zarr',
+    's3fs',
 ]
 
 [tool.setuptools.packages.find]
