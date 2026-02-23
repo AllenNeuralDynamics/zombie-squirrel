@@ -139,8 +139,7 @@ def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
         timestamp = None
         if acquisition_start_time:
             try:
-                dt = datetime.fromisoformat(acquisition_start_time.replace("Z", "+00:00"))
-                timestamp = int(dt.timestamp())
+                timestamp = datetime.fromisoformat(acquisition_start_time.replace("Z", "+00:00"))
             except (ValueError, AttributeError):
                 timestamp = None
 
@@ -156,8 +155,11 @@ def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
                     value = value.get("abbreviation", None)
                 elif col == "status_history" and isinstance(value, list) and len(value) > 0:
                     value = value[-1].get("status", None) if isinstance(value[-1], dict) else None
-                elif col == "value" and isinstance(value, dict):
-                    value = "{dict}"
+                elif col == "value":
+                    if isinstance(value, dict):
+                        value = "{dict}"
+                    elif value is not None:
+                        value = str(value)
 
                 metric_data[col] = value
             metric_data["asset_name"] = asset_name
