@@ -9,6 +9,7 @@ from zombie_squirrel.acorn_helpers.asset_basics import asset_basics  # noqa: F40
 from zombie_squirrel.acorn_helpers.qc import qc, qc_columns  # noqa: F401
 from zombie_squirrel.acorn_helpers.raw_to_derived import raw_to_derived  # noqa: F401
 from zombie_squirrel.acorn_helpers.source_data import source_data  # noqa: F401
+from zombie_squirrel.acorn_helpers.spike_sorted import spike_sorted  # noqa: F401
 from zombie_squirrel.acorn_helpers.unique_project_names import (  # noqa: F401
     unique_project_names,
 )
