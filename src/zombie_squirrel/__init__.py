@@ -3,7 +3,7 @@
 Provides functions to fetch and cache project names, subject IDs, and asset
 metadata from the AIND metadata database with support for multiple backends."""
 
-__version__ = "0.11.1"
+__version__ = "0.12.0"
 
 from zombie_squirrel.acorn_helpers.asset_basics import asset_basics  # noqa: F401
 from zombie_squirrel.acorn_helpers.custom import custom  # noqa: F401
