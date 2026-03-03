@@ -27,9 +27,11 @@ def qc(
     status_history, asset_name, subject_id, and timestamp. Special handling:
     - modality: extracts the "abbreviation" field from the dict
     - status_history: takes the last element and extracts the "status" field
-    - value: if the stored value is a dict, it is replaced with the string "{dict}"
+    - value: if the stored value is a dict value["value"] is extracted
     Timestamp is the unix timestamp (seconds since epoch) from 
     acquisition.acquisition_start_time.
+
+    Curation metrics are skipped
 
     Data is cached per subject_id. All assets for the subject are stored
     in cache, but can be filtered using the asset_names parameter.
@@ -115,15 +117,11 @@ def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
         return pd.DataFrame()
 
     _qc_fields = [
-        "object_type",
         "name",
         "modality",
         "stage",
         "value",
         "status_history",
-        "description",
-        "reference",
-        "evaluated_assets",
     ]
 
     all_metrics = []
@@ -147,18 +145,22 @@ def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
             continue
 
         for metric in quality_control["metrics"]:
+
+            if metric.get("object_type", "") == "Curation metric":
+                continue
+
             metric_data = {}
             for col in _qc_fields:
                 value = metric.get(col, None)
-                
+
                 if col == "modality" and isinstance(value, dict):
                     value = value.get("abbreviation", None)
                 elif col == "status_history" and isinstance(value, list) and len(value) > 0:
                     value = value[-1].get("status", None) if isinstance(value[-1], dict) else None
                 elif col == "value":
                     if isinstance(value, dict):
-                        value = "{dict}"
-                    elif value is not None:
+                        value = value.get("value", value)
+                    if value is not None and not isinstance(value, str):
                         value = str(value)
 
                 metric_data[col] = value
@@ -178,6 +180,7 @@ def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
         return pd.DataFrame()
 
     df = pd.DataFrame.from_records(all_metrics)
+    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
     acorns.TREE.hide(cache_key, df)
 
     logging.info(
