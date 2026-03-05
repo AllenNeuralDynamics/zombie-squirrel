@@ -45,7 +45,7 @@ ACORN_REGISTRY: dict[str, Callable[[], Any]] = {}
 
 
 def register_acorn(name: str):
-    """Decorator for registering new acorns."""
+    """Register acorn function with registry."""
 
     def decorator(func):
         """Register function in acorn registry."""

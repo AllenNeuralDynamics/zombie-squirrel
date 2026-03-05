@@ -12,7 +12,10 @@ EXPECTED_TYPE = "TIMESTAMP WITH TIME ZONE"
 
 
 class TestQCTimestampType(unittest.TestCase):
+    """Test QC timestamp types in S3 parquet files."""
+
     def setUp(self):
+        """Initialize S3 client and fetch QC file list."""
         self.s3_client = boto3.client("s3")
         paginator = self.s3_client.get_paginator("list_objects_v2")
         self.qc_keys = []
@@ -21,9 +24,11 @@ class TestQCTimestampType(unittest.TestCase):
                 self.qc_keys.append(obj["Key"])
 
     def test_qc_files_exist_on_s3(self):
+        """Test QC files exist on S3."""
         self.assertGreater(len(self.qc_keys), 0, f"No QC files found at s3://{BUCKET}/{QC_PREFIX}")
 
     def test_all_qc_files_have_timestamptz(self):
+        """Test all QC files have TIMESTAMPTZ timestamp column."""
         self.assertGreater(len(self.qc_keys), 0, f"No QC files found at s3://{BUCKET}/{QC_PREFIX}")
 
         total = len(self.qc_keys)

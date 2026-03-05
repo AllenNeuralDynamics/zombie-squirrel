@@ -7,10 +7,19 @@ import pandas as pd
 from aind_data_access_api.document_db import MetadataDbClient
 
 import zombie_squirrel.acorns as acorns
+from zombie_squirrel.squirrel import Column
 from zombie_squirrel.utils import (
     SquirrelMessage,
     setup_logging,
 )
+
+QC_METRIC_FIELDS = [
+    "name",
+    "modality",
+    "stage",
+    "value",
+    "status_history",
+]
 
 
 @acorns.register_acorn(acorns.NAMES["qc"])
@@ -28,7 +37,7 @@ def qc(
     - modality: extracts the "abbreviation" field from the dict
     - status_history: takes the last element and extracts the "status" field
     - value: if the stored value is a dict value["value"] is extracted
-    Timestamp is the unix timestamp (seconds since epoch) from 
+    Timestamp is the unix timestamp (seconds since epoch) from
     acquisition.acquisition_start_time.
 
     Curation metrics are skipped
@@ -49,14 +58,16 @@ def qc(
         string path to the S3 parquet file if lazy=True.
 
     Raises:
-        ValueError: If requested asset_names are not found in the subject's cache."""
+        ValueError: If requested asset_names are not found in the subject's cache.
+
+    """
     cache_key = f"qc/{subject_id}"
-    
+
     if lazy:
         if force_update:
             _fetch_subject_qc(subject_id)
         return acorns.TREE.get_location(cache_key)
-    
+
     df = acorns.TREE.scurry(cache_key)
 
     if df.empty and not force_update:
@@ -78,6 +89,7 @@ def qc(
 
 
 def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
+    """Fetch QC data for a subject from the database and cache it."""
     setup_logging()
     cache_key = f"qc/{subject_id}"
 
@@ -116,23 +128,15 @@ def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
         )
         return pd.DataFrame()
 
-    _qc_fields = [
-        "name",
-        "modality",
-        "stage",
-        "value",
-        "status_history",
-    ]
-
     all_metrics = []
     for record in records:
         asset_name = record.get("name", "")
         quality_control = record.get("quality_control", {})
         acquisition = record.get("acquisition", {})
         subject = record.get("subject", {})
-        
+
         subject_id_value = subject.get("subject_id", "")
-        
+
         acquisition_start_time = acquisition.get("acquisition_start_time", None)
         timestamp = None
         if acquisition_start_time:
@@ -145,12 +149,11 @@ def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
             continue
 
         for metric in quality_control["metrics"]:
-
             if metric.get("object_type", "") == "Curation metric":
                 continue
 
             metric_data = {}
-            for col in _qc_fields:
+            for col in QC_METRIC_FIELDS:
                 value = metric.get(col, None)
 
                 if col == "modality" and isinstance(value, dict):
@@ -159,8 +162,8 @@ def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
                     value = value[-1].get("status", None) if isinstance(value[-1], dict) else None
                 elif col == "value":
                     if isinstance(value, dict):
-                        value = value.get("value", value)
-                    if value is not None and not isinstance(value, str):
+                        value = "{dict}"
+                    elif value is not None and not isinstance(value, str):
                         value = str(value)
 
                 metric_data[col] = value
@@ -180,6 +183,13 @@ def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
         return pd.DataFrame()
 
     df = pd.DataFrame.from_records(all_metrics)
+
+    # Drop the object_type and status_history columns, if they exist
+    if "object_type" in df.columns:
+        df = df.drop(columns=["object_type"])
+    if "status_history" in df.columns:
+        df = df.drop(columns=["status_history"])
+
     df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
     acorns.TREE.hide(cache_key, df)
 
@@ -194,8 +204,16 @@ def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
     return df
 
 
-def qc_columns() -> list[str]:
-    return ["name", "stage", "object_type", "modality", "value", "status", "status_history", "asset_name"]
+def qc_columns() -> list[Column]:
+    """Return QC acorn column definitions."""
+    return [
+        Column(name="name", description="Metric name"),
+        Column(name="stage", description="Stage: raw, processing, or analysis"),
+        Column(name="modality", description="Modality abbreviation"),
+        Column(name="value", description="Metric value, converted to string if not already a string"),
+        Column(name="status", description="Latest metric status (fail, pass, pending)"),
+        Column(name="asset_name", description="Asset name the metric is associated with"),
+    ]
 
 
 def _filter_by_asset_names(df: pd.DataFrame, asset_names: str | list[str], subject_id: str) -> pd.DataFrame:
@@ -220,5 +238,3 @@ def _filter_by_asset_names(df: pd.DataFrame, asset_names: str | list[str], subje
         )
 
     return df[df["asset_name"].isin(asset_names)].reset_index(drop=True)
-
-

@@ -1,6 +1,7 @@
 """Unit tests for acorn registry mechanism.
 
-Tests for acorn registration and NAMES dictionary."""
+Tests for acorn registration and NAMES dictionary.
+"""
 
 import unittest
 
@@ -19,7 +20,6 @@ class TestAcornRegistration(unittest.TestCase):
         self.assertIn(NAMES["usi"], ACORN_REGISTRY)
         self.assertIn(NAMES["basics"], ACORN_REGISTRY)
         self.assertIn(NAMES["d2r"], ACORN_REGISTRY)
-        self.assertIn(NAMES["r2d"], ACORN_REGISTRY)
         self.assertIn(NAMES["qc"], ACORN_REGISTRY)
 
     def test_registry_values_are_callable(self):

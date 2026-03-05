@@ -7,6 +7,7 @@ import pandas as pd
 from aind_data_access_api.document_db import MetadataDbClient
 
 import zombie_squirrel.acorns as acorns
+from zombie_squirrel.squirrel import Column
 from zombie_squirrel.utils import (
     SquirrelMessage,
     setup_logging,
@@ -16,6 +17,7 @@ _DATETIME_PATTERN = re.compile(r"(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})$")
 
 
 def _extract_processing_time(name: str) -> str:
+    """Extract processing time from asset name using regex pattern."""
     match = _DATETIME_PATTERN.search(name)
     return match.group(1) if match else ""
 
@@ -31,7 +33,9 @@ def source_data(force_update: bool = False) -> pd.DataFrame:
         force_update: If True, bypass cache and fetch fresh data from database.
 
     Returns:
-        DataFrame with name, source_data, pipeline_name, and processing_time columns."""
+        DataFrame with name, source_data, pipeline_name, and processing_time columns.
+
+    """
     df = acorns.TREE.scurry(acorns.NAMES["d2r"])
 
     if df.empty and not force_update:
@@ -86,5 +90,11 @@ def source_data(force_update: bool = False) -> pd.DataFrame:
     return df
 
 
-def source_data_columns() -> list[str]:
-    return ["name", "source_data", "pipeline_name", "processing_time"]
+def source_data_columns() -> list[Column]:
+    """Return source data acorn column definitions."""
+    return [
+        Column(name="name", description="Asset name"),
+        Column(name="source_data", description="Asset name that this derived asset was generated from, if available"),
+        Column(name="pipeline_name", description="Pipeline that created this asset"),
+        Column(name="processing_time", description="Timestamp this asset was processed"),
+    ]

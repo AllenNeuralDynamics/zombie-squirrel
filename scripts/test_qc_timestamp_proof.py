@@ -9,14 +9,16 @@ import duckdb
 
 from zombie_squirrel import qc
 from zombie_squirrel.acorns import TREE
-from zombie_squirrel.utils import get_s3_cache_path, prefix_table_name
 
 SUBJECT_ID = "818323"
 BUCKET = "aind-scratch-data"
 
 
 class TestQCTimestampProof(unittest.TestCase):
+    """Proof test for QC timestamp storage type."""
+
     def test_timestamp_is_timestamptz_after_write(self):
+        """Test timestamp column stored as TIMESTAMPTZ after write."""
         print(f"\nWriting QC data for subject {SUBJECT_ID} to S3...", flush=True)
         qc(subject_id=SUBJECT_ID, force_update=True)
 

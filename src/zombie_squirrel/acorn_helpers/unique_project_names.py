@@ -6,6 +6,7 @@ import pandas as pd
 from aind_data_access_api.document_db import MetadataDbClient
 
 import zombie_squirrel.acorns as acorns
+from zombie_squirrel.squirrel import Column
 from zombie_squirrel.utils import (
     SquirrelMessage,
     setup_logging,
@@ -23,7 +24,9 @@ def unique_project_names(force_update: bool = False) -> list[str]:
         force_update: If True, bypass cache and fetch fresh data from database.
 
     Returns:
-        List of unique project names."""
+        List of unique project names.
+
+    """
     df = acorns.TREE.scurry(acorns.NAMES["upn"])
 
     if df.empty and not force_update:
@@ -52,5 +55,8 @@ def unique_project_names(force_update: bool = False) -> list[str]:
     return df["project_name"].tolist()
 
 
-def unique_project_names_columns() -> list[str]:
-    return ["project_name"]
+def unique_project_names_columns() -> list[Column]:
+    """Return unique project names acorn column definitions."""
+    return [
+        Column(name="project_name", description="Project name"),
+    ]

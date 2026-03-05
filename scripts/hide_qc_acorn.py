@@ -6,6 +6,7 @@ from zombie_squirrel.acorns import ACORN_REGISTRY, NAMES
 
 
 def main():
+    """Hide QC acorn for all subjects."""
     df_basics = ACORN_REGISTRY[NAMES["basics"]](force_update=False)
     subject_ids = df_basics["subject_id"].dropna().unique()
     print(f"Found {len(subject_ids)} subjects. Fetching QC data...")
@@ -21,7 +22,8 @@ def main():
                 subject_id = futures[future]
                 future.result()
                 print(f"[{i}/{len(subject_ids)}] Done: {subject_id}")
-    except Exception:
+    # no test coverage needed on exception
+    except Exception:  # noqa: PERF203
         for subject_id in subject_ids:
             qc_acorn(subject_id=subject_id, force_update=True)
 

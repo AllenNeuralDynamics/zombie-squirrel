@@ -15,10 +15,12 @@ def publish_squirrel_metadata() -> None:
     """Build and publish a Squirrel metadata JSON to the cache root.
 
     Collects column and location information for all registered acorns,
-    constructs a Squirrel model, and writes it as JSON via the active Tree."""
+    constructs a Squirrel model, and writes it as JSON via the active Tree.
+    """
     acorn_list = [
         Acorn(
             name=NAMES["upn"],
+            description="Unique project names across all assets",
             location=TREE.get_location(NAMES["upn"]),
             partitioned=False,
             type=AcornType.metadata,
@@ -26,6 +28,7 @@ def publish_squirrel_metadata() -> None:
         ),
         Acorn(
             name=NAMES["usi"],
+            description="Unique subject_ids across all assets",
             location=TREE.get_location(NAMES["usi"]),
             partitioned=False,
             type=AcornType.metadata,
@@ -33,6 +36,7 @@ def publish_squirrel_metadata() -> None:
         ),
         Acorn(
             name=NAMES["basics"],
+            description="Commonly used asset metadata, one row per data asset",
             location=TREE.get_location(NAMES["basics"]),
             partitioned=False,
             type=AcornType.metadata,
@@ -40,13 +44,22 @@ def publish_squirrel_metadata() -> None:
         ),
         Acorn(
             name=NAMES["d2r"],
+            description="Mapping from derived asset names to their source raw asset names",
             location=TREE.get_location(NAMES["d2r"]),
             partitioned=False,
             type=AcornType.metadata,
             columns=source_data_columns(),
         ),
         Acorn(
+            name=NAMES["r2d"],
+            description="Mapping from raw asset names to their derived asset names",
+            location=TREE.get_location(NAMES["r2d"]),
+            partitioned=False,
+            type=AcornType.metadata,
+        ),
+        Acorn(
             name=NAMES["qc"],
+            description="Quality control table with one row per QC metric, partitioned by subject_id",
             location=TREE.get_location("qc", partitioned=True),
             partitioned=True,
             partition_key="subject_id",
@@ -64,7 +77,8 @@ def hide_acorns():
     Updates each acorn individually. For the QC acorn, fetches
     unique subject IDs from asset_basics and updates each individually,
     using parallelization when multiple subjects are available.
-    After all updates, publishes Squirrel metadata JSON to the cache root."""
+    After all updates, publishes Squirrel metadata JSON to the cache root.
+    """
     ACORN_REGISTRY[NAMES["upn"]](force_update=True)
     ACORN_REGISTRY[NAMES["usi"]](force_update=True)
 
@@ -79,8 +93,7 @@ def hide_acorns():
         try:
             with ThreadPoolExecutor() as executor:
                 futures = [
-                    executor.submit(qc_acorn, subject_id=subject_id, force_update=True)
-                    for subject_id in subject_ids
+                    executor.submit(qc_acorn, subject_id=subject_id, force_update=True) for subject_id in subject_ids
                 ]
                 for future in as_completed(futures):
                     future.result()

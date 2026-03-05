@@ -1,7 +1,8 @@
 """Integration tests for zombie-squirrel package using Redshift backend.
 
 Tests that verify squirrel functions work correctly with the Redshift
-cache backend."""
+cache backend.
+"""
 
 import time
 
@@ -18,7 +19,9 @@ from zombie_squirrel import (
 
 def test_s3_unique_project_names():
     """Test fetching unique project names from S3 backend.
-    Measures performance and validates result is a list of project names."""
+
+    Measures performance and validates result is a list of project names.
+    """
     start = time.time()
     project_names = unique_project_names()
     end = time.time()
@@ -29,7 +32,9 @@ def test_s3_unique_project_names():
 
 def test_s3_unique_subject_ids():
     """Test fetching unique subject IDs from S3 backend.
-    Measures performance and validates result is a list of subject IDs."""
+
+    Measures performance and validates result is a list of subject IDs.
+    """
     start = time.time()
     subject_ids = unique_subject_ids()
     end = time.time()
@@ -40,7 +45,9 @@ def test_s3_unique_subject_ids():
 
 def test_s3_asset_basics():
     """Test fetching asset basics from S3 backend.
-    Validates result is a DataFrame with expected columns."""
+
+    Validates result is a DataFrame with expected columns.
+    """
     start = time.time()
     df = asset_basics()
     end = time.time()
@@ -65,7 +72,9 @@ def test_s3_asset_basics():
 
 def test_s3_source_data():
     """Test fetching source data references from S3 backend.
-    Validates result is a DataFrame with _id and source_data columns."""
+
+    Validates result is a DataFrame with _id and source_data columns.
+    """
     start = time.time()
     df = source_data()
     end = time.time()
@@ -77,7 +86,9 @@ def test_s3_source_data():
 
 def test_s3_raw_to_derived():
     """Test fetching raw to derived mapping from S3 backend.
-    Validates result is a DataFrame with _id and derived_records columns."""
+
+    Validates result is a DataFrame with _id and derived_records columns.
+    """
     start = time.time()
     df = raw_to_derived()
     end = time.time()

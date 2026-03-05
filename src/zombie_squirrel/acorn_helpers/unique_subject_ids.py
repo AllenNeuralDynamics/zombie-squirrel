@@ -6,6 +6,7 @@ import pandas as pd
 from aind_data_access_api.document_db import MetadataDbClient
 
 import zombie_squirrel.acorns as acorns
+from zombie_squirrel.squirrel import Column
 from zombie_squirrel.utils import (
     SquirrelMessage,
     setup_logging,
@@ -23,7 +24,9 @@ def unique_subject_ids(force_update: bool = False) -> list[str]:
         force_update: If True, bypass cache and fetch fresh data from database.
 
     Returns:
-        List of unique subject IDs."""
+        List of unique subject IDs.
+
+    """
     df = acorns.TREE.scurry(acorns.NAMES["usi"])
 
     if df.empty and not force_update:
@@ -52,5 +55,8 @@ def unique_subject_ids(force_update: bool = False) -> list[str]:
     return df["subject_id"].tolist()
 
 
-def unique_subject_ids_columns() -> list[str]:
-    return ["subject_id"]
+def unique_subject_ids_columns() -> list[Column]:
+    """Return unique subject IDs acorn column definitions."""
+    return [
+        Column(name="subject_id", description="Subject ID from subject.subject_id field"),
+    ]

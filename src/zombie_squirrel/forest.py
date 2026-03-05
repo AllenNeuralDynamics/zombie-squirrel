@@ -1,6 +1,7 @@
 """Storage backend interfaces for caching data."""
 
 import io
+import json
 import logging
 from abc import ABC, abstractmethod
 
@@ -31,6 +32,7 @@ class Tree(ABC):
             table_name: Single table name or list of table names.
                 When a list is provided, merges all tables and adds
                 an 'asset_name' column to differentiate sources.
+
         """
         pass  # pragma: no cover
 
@@ -73,6 +75,18 @@ class S3Tree(Tree):
             SquirrelMessage(
                 tree="S3Tree", acorn=table_name, message=f"Stored cache to s3://{self.bucket}/{s3_key}"
             ).to_json()
+        )
+
+        metadata = {"columns": data.columns.tolist()}
+        if table_name.startswith("qc/"):
+            json_key = "application-caches/zs_qc.json"
+        else:
+            json_filename = filename.replace(".pqt", ".json")
+            json_key = get_s3_cache_path(json_filename)
+        self.s3_client.put_object(
+            Bucket=self.bucket,
+            Key=json_key,
+            Body=json.dumps(metadata),
         )
 
     def scurry(self, table_name: str | list[str]) -> pd.DataFrame:
@@ -213,9 +227,7 @@ class MemoryTree(Tree):
     def plant(self, key: str, data: str) -> None:
         """Store a JSON string in the in-memory JSON store."""
         logging.info(
-            SquirrelMessage(
-                tree="MemoryTree", acorn=key, message=f"Storing metadata in memory for {key}"
-            ).to_json()
+            SquirrelMessage(tree="MemoryTree", acorn=key, message=f"Storing metadata in memory for {key}").to_json()
         )
         self._json_store[key] = data
 
@@ -244,4 +256,3 @@ class MemoryTree(Tree):
             ).to_json()
         )
         return result
-

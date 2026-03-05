@@ -6,6 +6,7 @@ import pandas as pd
 from aind_data_access_api.document_db import MetadataDbClient
 
 import zombie_squirrel.acorns as acorns
+from zombie_squirrel.squirrel import Column
 from zombie_squirrel.utils import (
     SquirrelMessage,
     setup_logging,
@@ -25,7 +26,9 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
         force_update: If True, bypass cache and fetch fresh data from database.
 
     Returns:
-        DataFrame with basic asset metadata."""
+        DataFrame with basic asset metadata.
+
+    """
     df = acorns.TREE.scurry(acorns.NAMES["basics"])
 
     FIELDS = [
@@ -156,19 +159,20 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
     return df
 
 
-def asset_basics_columns() -> list[str]:
+def asset_basics_columns() -> list[Column]:
+    """Return asset basics acorn column definitions."""
     return [
-        "_id",
-        "_last_modified",
-        "modalities",
-        "project_name",
-        "data_level",
-        "subject_id",
-        "acquisition_start_time",
-        "acquisition_end_time",
-        "code_ocean",
-        "process_date",
-        "genotype",
-        "location",
-        "name",
+        Column(name="_id", description="DocDB record ID for the asset"),
+        Column(name="_last_modified", description="DocDB last modified timestamp for the asset record"),
+        Column(name="modalities", description="Modalities present in the asset, comma-separated if multiple"),
+        Column(name="project_name", description="Project name associated with the asset"),
+        Column(name="data_level", description="Data level of the asset (e.g. raw, derived)"),
+        Column(name="subject_id", description="Subject ID"),
+        Column(name="acquisition_start_time", description="Acquisition start time in ISO format"),
+        Column(name="acquisition_end_time", description="Acquisition end time in ISO format"),
+        Column(name="code_ocean", description="Code Ocean asset ID if available"),
+        Column(name="process_date", description="Date of latest processing in YYYY-MM-DD format"),
+        Column(name="genotype", description="Genotype information for the subject if available"),
+        Column(name="location", description="Location of the asset in S3"),
+        Column(name="name", description="Asset name"),
     ]
