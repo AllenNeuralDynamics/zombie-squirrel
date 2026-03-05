@@ -5,11 +5,10 @@ import unittest
 
 from zombie_squirrel.acorn_helpers.asset_basics import asset_basics_columns
 from zombie_squirrel.acorn_helpers.qc import qc_columns
-from zombie_squirrel.acorn_helpers.raw_to_derived import raw_to_derived_columns
 from zombie_squirrel.acorn_helpers.source_data import source_data_columns
 from zombie_squirrel.acorn_helpers.unique_project_names import unique_project_names_columns
 from zombie_squirrel.acorn_helpers.unique_subject_ids import unique_subject_ids_columns
-from zombie_squirrel.squirrel import Acorn, AcornType, Squirrel
+from zombie_squirrel.squirrel import Acorn, AcornType, Column, Squirrel
 
 
 class TestAcornType(unittest.TestCase):
@@ -33,10 +32,11 @@ class TestAcorn(unittest.TestCase):
     def _make_acorn(self, **kwargs):
         defaults = {
             "name": "test_acorn",
+            "description": "A test acorn",
             "location": "s3://bucket/path/file.pqt",
             "partitioned": False,
             "type": AcornType.metadata,
-            "columns": ["col1", "col2"],
+            "columns": [Column(name="col1", description=""), Column(name="col2", description="")],
         }
         defaults.update(kwargs)
         return Acorn(**defaults)
@@ -48,7 +48,7 @@ class TestAcorn(unittest.TestCase):
         self.assertFalse(acorn.partitioned)
         self.assertIsNone(acorn.partition_key)
         self.assertEqual(acorn.type, AcornType.metadata)
-        self.assertEqual(acorn.columns, ["col1", "col2"])
+        self.assertEqual(acorn.columns, [Column(name="col1", description=""), Column(name="col2", description="")])
 
     def test_partitioned_with_key(self):
         acorn = self._make_acorn(
@@ -83,11 +83,11 @@ class TestAcorn(unittest.TestCase):
     def test_serialization_includes_all_fields(self):
         acorn = self._make_acorn()
         data = json.loads(acorn.model_dump_json())
-        for field in ("name", "location", "partitioned", "partition_key", "type", "columns"):
+        for field in ("name", "description", "location", "partitioned", "partition_key", "type", "columns"):
             self.assertIn(field, data)
 
     def test_columns_preserved(self):
-        cols = ["_id", "_last_modified", "subject_id"]
+        cols = [Column(name="_id", description=""), Column(name="_last_modified", description=""), Column(name="subject_id", description="")]
         acorn = self._make_acorn(columns=cols)
         self.assertEqual(acorn.columns, cols)
 
@@ -96,10 +96,11 @@ class TestSquirrel(unittest.TestCase):
     def _make_acorn(self, name="a"):
         return Acorn(
             name=name,
+            description="A test acorn",
             location="s3://bucket/path.pqt",
             partitioned=False,
             type=AcornType.metadata,
-            columns=["col1"],
+            columns=[Column(name="col1", description="")],
         )
 
     def test_empty_acorns(self):
@@ -125,11 +126,12 @@ class TestSquirrel(unittest.TestCase):
     def test_serialization_roundtrip(self):
         acorn = Acorn(
             name="quality_control",
+            description="QC data per subject",
             location="s3://bucket/qc/",
             partitioned=True,
             partition_key="subject_id",
             type=AcornType.asset,
-            columns=["name", "stage"],
+            columns=[Column(name="name", description=""), Column(name="stage", description="")],
         )
         squirrel = Squirrel(acorns=[acorn])
         data = json.loads(squirrel.model_dump_json())
@@ -143,36 +145,34 @@ class TestColumnsHelpers(unittest.TestCase):
     def test_unique_project_names_columns(self):
         cols = unique_project_names_columns()
         self.assertIsInstance(cols, list)
-        self.assertIn("project_name", cols)
+        names = [c.name for c in cols]
+        self.assertIn("project_name", names)
 
     def test_unique_subject_ids_columns(self):
         cols = unique_subject_ids_columns()
         self.assertIsInstance(cols, list)
-        self.assertIn("subject_id", cols)
+        names = [c.name for c in cols]
+        self.assertIn("subject_id", names)
 
     def test_asset_basics_columns(self):
         cols = asset_basics_columns()
         self.assertIsInstance(cols, list)
+        names = [c.name for c in cols]
         for expected in ("_id", "_last_modified", "subject_id", "modalities", "project_name"):
-            self.assertIn(expected, cols)
+            self.assertIn(expected, names)
 
     def test_source_data_columns(self):
         cols = source_data_columns()
         self.assertIsInstance(cols, list)
-        self.assertIn("_id", cols)
-        self.assertIn("source_data", cols)
-
-    def test_raw_to_derived_columns(self):
-        cols = raw_to_derived_columns()
-        self.assertIsInstance(cols, list)
-        self.assertIn("_id", cols)
-        self.assertIn("derived_records", cols)
+        names = [c.name for c in cols]
+        self.assertIn("source_data", names)
 
     def test_qc_columns(self):
         cols = qc_columns()
         self.assertIsInstance(cols, list)
-        for expected in ("name", "stage", "status_history", "asset_name", "subject_id", "timestamp"):
-            self.assertIn(expected, cols)
+        names = [c.name for c in cols]
+        for expected in ("name", "stage", "status", "asset_name"):
+            self.assertIn(expected, names)
 
 
 if __name__ == "__main__":

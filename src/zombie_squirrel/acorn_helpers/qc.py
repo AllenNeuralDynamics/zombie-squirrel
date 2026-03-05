@@ -7,6 +7,7 @@ import pandas as pd
 from aind_data_access_api.document_db import MetadataDbClient
 
 import zombie_squirrel.acorns as acorns
+from zombie_squirrel.squirrel import Column
 from zombie_squirrel.utils import (
     SquirrelMessage,
     setup_logging,
@@ -180,6 +181,13 @@ def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
         return pd.DataFrame()
 
     df = pd.DataFrame.from_records(all_metrics)
+
+    # Drop the object_type and status_history columns, if they exist
+    if "object_type" in df.columns:
+        df = df.drop(columns=["object_type"])
+    if "status_history" in df.columns:
+        df = df.drop(columns=["status_history"])
+
     df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
     acorns.TREE.hide(cache_key, df)
 
@@ -194,8 +202,15 @@ def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
     return df
 
 
-def qc_columns() -> list[str]:
-    return ["name", "stage", "object_type", "modality", "value", "status", "status_history", "asset_name"]
+def qc_columns() -> list[Column]:
+    return [
+        Column(name="name", description="Metric name"),
+        Column(name="stage", description="Stage: raw, processing, or analysis"),
+        Column(name="modality", description="Modality abbreviation"),
+        Column(name="value", description="Metric value, converted to string if not already a string"),
+        Column(name="status", description="Latest metric status (fail, pass, pending)"),
+        Column(name="asset_name", description="Asset name the metric is associated with"),
+    ]
 
 
 def _filter_by_asset_names(df: pd.DataFrame, asset_names: str | list[str], subject_id: str) -> pd.DataFrame:

@@ -12,13 +12,19 @@ class AcornType(str, Enum):
     realtime = "realtime"
 
 
+class Column(BaseModel):
+    name: str
+    description: str
+
+
 class Acorn(BaseModel):
     name: str
+    description: str
     location: str
     partitioned: bool
     partition_key: str | None = None
     type: AcornType
-    columns: list[str]
+    columns: list[Column] = []
 
 
 class Squirrel(BaseModel):

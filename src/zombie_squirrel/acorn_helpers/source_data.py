@@ -7,6 +7,7 @@ import pandas as pd
 from aind_data_access_api.document_db import MetadataDbClient
 
 import zombie_squirrel.acorns as acorns
+from zombie_squirrel.squirrel import Column
 from zombie_squirrel.utils import (
     SquirrelMessage,
     setup_logging,
@@ -86,5 +87,10 @@ def source_data(force_update: bool = False) -> pd.DataFrame:
     return df
 
 
-def source_data_columns() -> list[str]:
-    return ["name", "source_data", "pipeline_name", "processing_time"]
+def source_data_columns() -> list[Column]:
+    return [
+        Column(name="name", description="Asset name"),
+        Column(name="source_data", description="Asset name that this derived asset was generated from, if available"),
+        Column(name="pipeline_name", description="Pipeline that created this asset"),
+        Column(name="processing_time", description="Timestamp this asset was processed"),
+    ]

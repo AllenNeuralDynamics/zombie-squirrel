@@ -23,4 +23,3 @@ def raw_to_derived(asset_name: str, latest: bool = False, force_update: bool = F
             .first()
         )
     return matches["name"].tolist()
-

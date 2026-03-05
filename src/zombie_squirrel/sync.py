@@ -19,6 +19,7 @@ def publish_squirrel_metadata() -> None:
     acorn_list = [
         Acorn(
             name=NAMES["upn"],
+            description="Unique project names across all assets",
             location=TREE.get_location(NAMES["upn"]),
             partitioned=False,
             type=AcornType.metadata,
@@ -26,6 +27,7 @@ def publish_squirrel_metadata() -> None:
         ),
         Acorn(
             name=NAMES["usi"],
+            description="Unique subject_ids across all assets",
             location=TREE.get_location(NAMES["usi"]),
             partitioned=False,
             type=AcornType.metadata,
@@ -33,6 +35,7 @@ def publish_squirrel_metadata() -> None:
         ),
         Acorn(
             name=NAMES["basics"],
+            description="Commonly used asset metadata, one row per data asset",
             location=TREE.get_location(NAMES["basics"]),
             partitioned=False,
             type=AcornType.metadata,
@@ -40,13 +43,22 @@ def publish_squirrel_metadata() -> None:
         ),
         Acorn(
             name=NAMES["d2r"],
+            description="Mapping from derived asset names to their source raw asset names",
             location=TREE.get_location(NAMES["d2r"]),
             partitioned=False,
             type=AcornType.metadata,
             columns=source_data_columns(),
         ),
         Acorn(
+            name=NAMES["r2d"],
+            description="Mapping from raw asset names to their derived asset names",
+            location=TREE.get_location(NAMES["r2d"]),
+            partitioned=False,
+            type=AcornType.metadata,
+        ),
+        Acorn(
             name=NAMES["qc"],
+            description="Quality control table with one row per QC metric, partitioned by subject_id",
             location=TREE.get_location("qc", partitioned=True),
             partitioned=True,
             partition_key="subject_id",

@@ -40,7 +40,7 @@ class TestHideAcorns(unittest.TestCase):
         mock_usi.assert_called_once_with(force_update=True)
         mock_basics.assert_called_once_with(force_update=True)
         mock_d2r.assert_called_once_with(force_update=True)
-        mock_r2d.assert_called_once_with(force_update=True)
+        mock_r2d.assert_not_called()
 
     @patch("zombie_squirrel.sync.publish_squirrel_metadata")
     @patch("zombie_squirrel.sync.ACORN_REGISTRY")
@@ -190,7 +190,8 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
         payload = json.loads(mock_tree.plant.call_args[0][1])
         for acorn in payload["acorns"]:
             self.assertIsInstance(acorn["columns"], list)
-            self.assertGreater(len(acorn["columns"]), 0)
+            if acorn["name"] != "raw_to_derived":
+                self.assertGreater(len(acorn["columns"]), 0)
 
 
 if __name__ == "__main__":

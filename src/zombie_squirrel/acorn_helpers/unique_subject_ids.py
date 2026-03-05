@@ -6,6 +6,7 @@ import pandas as pd
 from aind_data_access_api.document_db import MetadataDbClient
 
 import zombie_squirrel.acorns as acorns
+from zombie_squirrel.squirrel import Column
 from zombie_squirrel.utils import (
     SquirrelMessage,
     setup_logging,
@@ -52,5 +53,7 @@ def unique_subject_ids(force_update: bool = False) -> list[str]:
     return df["subject_id"].tolist()
 
 
-def unique_subject_ids_columns() -> list[str]:
-    return ["subject_id"]
+def unique_subject_ids_columns() -> list[Column]:
+    return [
+        Column(name="subject_id", description="Subject ID from subject.subject_id field"),
+    ]
