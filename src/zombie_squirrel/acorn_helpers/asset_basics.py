@@ -26,7 +26,9 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
         force_update: If True, bypass cache and fetch fresh data from database.
 
     Returns:
-        DataFrame with basic asset metadata."""
+        DataFrame with basic asset metadata.
+
+    """
     df = acorns.TREE.scurry(acorns.NAMES["basics"])
 
     FIELDS = [
@@ -158,6 +160,7 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
 
 
 def asset_basics_columns() -> list[Column]:
+    """Return asset basics acorn column definitions."""
     return [
         Column(name="_id", description="DocDB record ID for the asset"),
         Column(name="_last_modified", description="DocDB last modified timestamp for the asset record"),

@@ -24,7 +24,9 @@ def unique_project_names(force_update: bool = False) -> list[str]:
         force_update: If True, bypass cache and fetch fresh data from database.
 
     Returns:
-        List of unique project names."""
+        List of unique project names.
+
+    """
     df = acorns.TREE.scurry(acorns.NAMES["upn"])
 
     if df.empty and not force_update:
@@ -54,6 +56,7 @@ def unique_project_names(force_update: bool = False) -> list[str]:
 
 
 def unique_project_names_columns() -> list[Column]:
+    """Return unique project names acorn column definitions."""
     return [
         Column(name="project_name", description="Project name"),
     ]

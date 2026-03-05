@@ -1,7 +1,8 @@
 """Unit tests for zombie_squirrel.trees module.
 
 Tests for abstract base class, memory backend, and S3 backend
-for caching functionality."""
+for caching functionality.
+"""
 
 import unittest
 from unittest.mock import MagicMock, patch

@@ -10,7 +10,10 @@ from zombie_squirrel.sync import hide_acorns, publish_squirrel_metadata
 
 
 class TestHideAcorns(unittest.TestCase):
+    """Test hide_acorns function."""
+
     def _make_registry(self, mock_upn, mock_usi, mock_basics, mock_d2r, mock_r2d, mock_qc):
+        """Create mock acorn registry dict."""
         return {
             "unique_project_names": mock_upn,
             "unique_subject_ids": mock_usi,
@@ -23,6 +26,7 @@ class TestHideAcorns(unittest.TestCase):
     @patch("zombie_squirrel.sync.publish_squirrel_metadata")
     @patch("zombie_squirrel.sync.ACORN_REGISTRY")
     def test_all_acorns_called_with_force_update(self, mock_registry, mock_publish):
+        """Test all acorns called with force_update flag."""
         df_basics = pd.DataFrame({"subject_id": ["sub1"]})
         mock_basics = MagicMock(return_value=df_basics)
         mock_upn = MagicMock()
@@ -45,6 +49,7 @@ class TestHideAcorns(unittest.TestCase):
     @patch("zombie_squirrel.sync.publish_squirrel_metadata")
     @patch("zombie_squirrel.sync.ACORN_REGISTRY")
     def test_qc_called_per_subject(self, mock_registry, mock_publish):
+        """Test QC acorn called once per subject."""
         df_basics = pd.DataFrame({"subject_id": ["sub1", "sub2", None]})
         mock_basics = MagicMock(return_value=df_basics)
         mock_qc = MagicMock()
@@ -66,6 +71,7 @@ class TestHideAcorns(unittest.TestCase):
     @patch("zombie_squirrel.sync.publish_squirrel_metadata")
     @patch("zombie_squirrel.sync.ACORN_REGISTRY")
     def test_qc_skipped_when_no_subjects(self, mock_registry, mock_publish):
+        """Test QC not called when no subjects present."""
         df_basics = pd.DataFrame({"subject_id": [None, None]})
         mock_basics = MagicMock(return_value=df_basics)
         mock_qc = MagicMock()
@@ -80,6 +86,7 @@ class TestHideAcorns(unittest.TestCase):
     @patch("zombie_squirrel.sync.publish_squirrel_metadata")
     @patch("zombie_squirrel.sync.ACORN_REGISTRY")
     def test_publish_metadata_called_at_end(self, mock_registry, mock_publish):
+        """Test publish_squirrel_metadata called after acorns processed."""
         df_basics = pd.DataFrame({"subject_id": ["sub1"]})
         mock_basics = MagicMock(return_value=df_basics)
         mock_registry.__getitem__.side_effect = self._make_registry(
@@ -93,6 +100,7 @@ class TestHideAcorns(unittest.TestCase):
     @patch("zombie_squirrel.sync.publish_squirrel_metadata")
     @patch("zombie_squirrel.sync.ACORN_REGISTRY")
     def test_exception_from_acorn_propagates(self, mock_registry, mock_publish):
+        """Test exceptions from acorns propagate to caller."""
         mock_upn = MagicMock(side_effect=Exception("Update failed"))
         mock_registry.__getitem__.side_effect = self._make_registry(
             mock_upn, MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
@@ -105,8 +113,11 @@ class TestHideAcorns(unittest.TestCase):
 
 
 class TestPublishSquirrelMetadata(unittest.TestCase):
+    """Test publish_squirrel_metadata function."""
+
     @patch("zombie_squirrel.sync.TREE")
     def test_plant_called_with_squirrel_json_key(self, mock_tree):
+        """Test tree.plant called with squirrel.json key."""
         mock_tree.get_location.return_value = "s3://bucket/path"
 
         publish_squirrel_metadata()
@@ -117,6 +128,7 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
 
     @patch("zombie_squirrel.sync.TREE")
     def test_published_json_contains_six_acorns(self, mock_tree):
+        """Test published JSON contains six acorns."""
         mock_tree.get_location.return_value = "s3://bucket/path"
 
         publish_squirrel_metadata()
@@ -127,6 +139,7 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
 
     @patch("zombie_squirrel.sync.TREE")
     def test_published_json_acorn_names(self, mock_tree):
+        """Test published JSON contains all acorn names."""
         mock_tree.get_location.return_value = "s3://bucket/path"
 
         publish_squirrel_metadata()
@@ -142,6 +155,7 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
 
     @patch("zombie_squirrel.sync.TREE")
     def test_qc_acorn_is_partitioned(self, mock_tree):
+        """Test quality control acorn is marked as partitioned."""
         mock_tree.get_location.return_value = "s3://bucket/path"
 
         publish_squirrel_metadata()
@@ -154,6 +168,7 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
 
     @patch("zombie_squirrel.sync.TREE")
     def test_non_qc_acorns_are_metadata_type(self, mock_tree):
+        """Test non-QC acorns are metadata type."""
         mock_tree.get_location.return_value = "s3://bucket/path"
 
         publish_squirrel_metadata()
@@ -166,6 +181,7 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
 
     @patch("zombie_squirrel.sync.TREE")
     def test_get_location_called_for_each_acorn(self, mock_tree):
+        """Test get_location called for each acorn."""
         mock_tree.get_location.return_value = "s3://bucket/path"
 
         publish_squirrel_metadata()
@@ -174,6 +190,7 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
 
     @patch("zombie_squirrel.sync.TREE")
     def test_qc_location_uses_partitioned_flag(self, mock_tree):
+        """Test QC location retrieved with partitioned flag."""
         mock_tree.get_location.return_value = "s3://bucket/path"
 
         publish_squirrel_metadata()
@@ -183,6 +200,7 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
 
     @patch("zombie_squirrel.sync.TREE")
     def test_acorns_have_columns(self, mock_tree):
+        """Test all acorns have columns in output."""
         mock_tree.get_location.return_value = "s3://bucket/path"
 
         publish_squirrel_metadata()
@@ -192,11 +210,6 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
             self.assertIsInstance(acorn["columns"], list)
             if acorn["name"] != "raw_to_derived":
                 self.assertGreater(len(acorn["columns"]), 0)
-
-
-if __name__ == "__main__":
-    unittest.main()
-
 
     @patch("zombie_squirrel.sync.ACORN_REGISTRY")
     def test_hide_acorns_calls_all_acorns(self, mock_registry):

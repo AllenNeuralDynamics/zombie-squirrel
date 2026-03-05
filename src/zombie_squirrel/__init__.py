@@ -1,7 +1,8 @@
 """Zombie-squirrel: caching and synchronization for AIND metadata.
 
 Provides functions to fetch and cache project names, subject IDs, and asset
-metadata from the AIND metadata database with support for multiple backends."""
+metadata from the AIND metadata database with support for multiple backends.
+"""
 
 __version__ = "0.12.0"
 

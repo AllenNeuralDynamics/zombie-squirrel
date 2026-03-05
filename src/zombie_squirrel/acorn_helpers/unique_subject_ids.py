@@ -24,7 +24,9 @@ def unique_subject_ids(force_update: bool = False) -> list[str]:
         force_update: If True, bypass cache and fetch fresh data from database.
 
     Returns:
-        List of unique subject IDs."""
+        List of unique subject IDs.
+
+    """
     df = acorns.TREE.scurry(acorns.NAMES["usi"])
 
     if df.empty and not force_update:
@@ -54,6 +56,7 @@ def unique_subject_ids(force_update: bool = False) -> list[str]:
 
 
 def unique_subject_ids_columns() -> list[Column]:
+    """Return unique subject IDs acorn column definitions."""
     return [
         Column(name="subject_id", description="Subject ID from subject.subject_id field"),
     ]

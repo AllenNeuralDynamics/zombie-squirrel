@@ -13,13 +13,13 @@ def raw_to_derived(asset_name: str, latest: bool = False, force_update: bool = F
         force_update: If True, bypass cache and fetch fresh data from database.
 
     Returns:
-        List of derived asset names."""
+        List of derived asset names.
+
+    """
     df = source_data(force_update=force_update)
     matches = df[df["source_data"] == asset_name].copy()
     if latest and not matches.empty:
         matches = (
-            matches.sort_values("processing_time", ascending=False)
-            .groupby("pipeline_name", as_index=False)
-            .first()
+            matches.sort_values("processing_time", ascending=False).groupby("pipeline_name", as_index=False).first()
         )
     return matches["name"].tolist()

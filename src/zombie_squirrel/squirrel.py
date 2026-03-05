@@ -6,6 +6,8 @@ from pydantic import BaseModel
 
 
 class AcornType(str, Enum):
+    """Enumeration of acorn data types."""
+
     metadata = "metadata"
     asset = "asset"
     event = "event"
@@ -13,11 +15,15 @@ class AcornType(str, Enum):
 
 
 class Column(BaseModel):
+    """Column definition for acorn metadata."""
+
     name: str
     description: str
 
 
 class Acorn(BaseModel):
+    """Acorn metadata definition."""
+
     name: str
     description: str
     location: str
@@ -28,4 +34,6 @@ class Acorn(BaseModel):
 
 
 class Squirrel(BaseModel):
+    """Squirrel metadata container for acorns."""
+
     acorns: list[Acorn]

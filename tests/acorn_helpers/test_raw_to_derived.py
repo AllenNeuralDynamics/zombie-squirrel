@@ -12,6 +12,7 @@ class TestRawToDerived(unittest.TestCase):
     """Tests for raw_to_derived helper function."""
 
     def _make_df(self, rows):
+        """Create test DataFrame with raw-to-derived columns."""
         return pd.DataFrame(rows, columns=["name", "source_data", "pipeline_name", "processing_time"])
 
     @patch("zombie_squirrel.acorn_helpers.raw_to_derived.source_data")

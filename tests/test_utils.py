@@ -1,6 +1,7 @@
 """Unit tests for zombie_squirrel.utils module.
 
-Tests for utility functions."""
+Tests for utility functions.
+"""
 
 import json
 import unittest

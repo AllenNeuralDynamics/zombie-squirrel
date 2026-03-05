@@ -1,6 +1,7 @@
 """Unit tests for acorn columns functions.
 
-Minimal tests to verify columns functions work correctly."""
+Minimal tests to verify columns functions work correctly.
+"""
 
 import json
 import unittest

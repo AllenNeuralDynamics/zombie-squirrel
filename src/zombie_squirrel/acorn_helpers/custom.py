@@ -19,6 +19,7 @@ def custom(name: str, force_update: bool = False, df: pd.DataFrame | None = None
     Raises:
         ValueError: If force_update is True but df is not provided.
         ValueError: If force_update is False and the cache is empty for the given name.
+
     """
     if force_update:
         if df is None:

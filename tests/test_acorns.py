@@ -1,6 +1,7 @@
 """Unit tests for acorn registry mechanism.
 
-Tests for acorn registration and NAMES dictionary."""
+Tests for acorn registration and NAMES dictionary.
+"""
 
 import unittest
 

@@ -31,6 +31,7 @@ class Tree(ABC):
             table_name: Single table name or list of table names.
                 When a list is provided, merges all tables and adds
                 an 'asset_name' column to differentiate sources.
+
         """
         pass  # pragma: no cover
 
@@ -213,9 +214,7 @@ class MemoryTree(Tree):
     def plant(self, key: str, data: str) -> None:
         """Store a JSON string in the in-memory JSON store."""
         logging.info(
-            SquirrelMessage(
-                tree="MemoryTree", acorn=key, message=f"Storing metadata in memory for {key}"
-            ).to_json()
+            SquirrelMessage(tree="MemoryTree", acorn=key, message=f"Storing metadata in memory for {key}").to_json()
         )
         self._json_store[key] = data
 
@@ -244,4 +243,3 @@ class MemoryTree(Tree):
             ).to_json()
         )
         return result
-
