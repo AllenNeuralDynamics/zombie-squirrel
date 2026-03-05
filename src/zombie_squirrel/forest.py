@@ -1,6 +1,7 @@
 """Storage backend interfaces for caching data."""
 
 import io
+import json
 import logging
 from abc import ABC, abstractmethod
 
@@ -74,6 +75,18 @@ class S3Tree(Tree):
             SquirrelMessage(
                 tree="S3Tree", acorn=table_name, message=f"Stored cache to s3://{self.bucket}/{s3_key}"
             ).to_json()
+        )
+
+        metadata = {"columns": data.columns.tolist()}
+        if table_name.startswith("qc/"):
+            json_key = "application-caches/zs_qc.json"
+        else:
+            json_filename = filename.replace(".pqt", ".json")
+            json_key = get_s3_cache_path(json_filename)
+        self.s3_client.put_object(
+            Bucket=self.bucket,
+            Key=json_key,
+            Body=json.dumps(metadata),
         )
 
     def scurry(self, table_name: str | list[str]) -> pd.DataFrame:

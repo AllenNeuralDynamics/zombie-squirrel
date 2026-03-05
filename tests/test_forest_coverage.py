@@ -3,7 +3,24 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from zombie_squirrel.forest import S3Tree
+from zombie_squirrel.forest import MemoryTree, S3Tree
+
+
+class TestMemoryTreeGetLocation(unittest.TestCase):
+    """Tests for MemoryTree.get_location method."""
+
+    def test_memory_tree_get_location_partitioned(self):
+        """Test MemoryTree.get_location with partitioned=True."""
+        tree = MemoryTree()
+        result = tree.get_location("qc", partitioned=True)
+        self.assertEqual(result, "qc/")
+
+    def test_memory_tree_plant(self):
+        """Test MemoryTree.plant stores data in json store."""
+        tree = MemoryTree()
+        tree.plant("test.json", '{"key": "value"}')
+        self.assertIn("test.json", tree._json_store)
+        self.assertEqual(tree._json_store["test.json"], '{"key": "value"}')
 
 
 class TestS3TreeGetLocation(unittest.TestCase):

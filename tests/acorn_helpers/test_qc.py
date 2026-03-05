@@ -367,6 +367,37 @@ class TestQCMemoryTree(unittest.TestCase):
         self.assertEqual(len(df), 1)
         self.assertEqual(df.iloc[0]["name"], "Metric A")
 
+    @patch("zombie_squirrel.acorn_helpers.qc.MetadataDbClient")
+    def test_qc_numeric_value_converted_to_string(self, mock_client_class):
+        """Test that numeric values in QC metrics are converted to strings."""
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "test-asset-001",
+                "name": "test-asset",
+                "quality_control": {
+                    "metrics": [
+                        {
+                            "object_type": "QC metric",
+                            "name": "Numeric Metric",
+                            "stage": "Processing",
+                            "modality": None,
+                            "value": 42,
+                            "tags": None,
+                            "status_history": [],
+                        }
+                    ]
+                },
+            }
+        ]
+
+        df = qc("test-asset", force_update=True)
+
+        self.assertEqual(len(df), 1)
+        self.assertEqual(df.iloc[0]["value"], "42")
+
 
 if __name__ == "__main__":
     unittest.main()

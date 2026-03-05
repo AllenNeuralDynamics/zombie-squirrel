@@ -162,8 +162,8 @@ def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
                     value = value[-1].get("status", None) if isinstance(value[-1], dict) else None
                 elif col == "value":
                     if isinstance(value, dict):
-                        value = value.get("value", value)
-                    if value is not None and not isinstance(value, str):
+                        value = "{dict}"
+                    elif value is not None and not isinstance(value, str):
                         value = str(value)
 
                 metric_data[col] = value

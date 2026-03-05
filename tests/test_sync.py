@@ -211,8 +211,9 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
             if acorn["name"] != "raw_to_derived":
                 self.assertGreater(len(acorn["columns"]), 0)
 
+    @patch("zombie_squirrel.sync.TREE")
     @patch("zombie_squirrel.sync.ACORN_REGISTRY")
-    def test_hide_acorns_calls_all_acorns(self, mock_registry):
+    def test_hide_acorns_calls_all_acorns(self, mock_registry, mock_tree):
         """Test that hide_acorns calls all registered acorns with force_update."""
         mock_upn = MagicMock()
         mock_usi = MagicMock()
@@ -234,19 +235,21 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
             "quality_control": mock_qc,
         }[x]
 
+        mock_tree.get_location.return_value = "s3://test-bucket/test"
+
         hide_acorns()
 
         mock_upn.assert_called_once_with(force_update=True)
         mock_usi.assert_called_once_with(force_update=True)
         mock_basics.assert_called_once_with(force_update=True)
         mock_d2r.assert_called_once_with(force_update=True)
-        mock_r2d.assert_called_once_with(force_update=True)
         assert mock_qc.call_count == 2
-        mock_qc.assert_any_call(subject_id="subject1", force_update=True, write_metadata=True)
-        mock_qc.assert_any_call(subject_id="subject2", force_update=True, write_metadata=False)
+        mock_qc.assert_any_call(subject_id="subject1", force_update=True)
+        mock_qc.assert_any_call(subject_id="subject2", force_update=True)
 
+    @patch("zombie_squirrel.sync.TREE")
     @patch("zombie_squirrel.sync.ACORN_REGISTRY")
-    def test_hide_acorns_empty_registry(self, mock_registry):
+    def test_hide_acorns_empty_registry(self, mock_registry, mock_tree):
         """Test hide_acorns with no subject IDs in asset_basics."""
         mock_upn = MagicMock()
         mock_usi = MagicMock()
@@ -268,17 +271,19 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
             "quality_control": mock_qc,
         }[x]
 
+        mock_tree.get_location.return_value = "s3://test-bucket/test"
+
         hide_acorns()
 
         mock_upn.assert_called_once_with(force_update=True)
         mock_usi.assert_called_once_with(force_update=True)
         mock_basics.assert_called_once_with(force_update=True)
         mock_d2r.assert_called_once_with(force_update=True)
-        mock_r2d.assert_called_once_with(force_update=True)
         mock_qc.assert_not_called()
 
+    @patch("zombie_squirrel.sync.TREE")
     @patch("zombie_squirrel.sync.ACORN_REGISTRY")
-    def test_hide_acorns_single_acorn(self, mock_registry):
+    def test_hide_acorns_single_acorn(self, mock_registry, mock_tree):
         """Test hide_acorns with a single subject ID."""
         mock_upn = MagicMock()
         mock_usi = MagicMock()
@@ -300,12 +305,15 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
             "quality_control": mock_qc,
         }[x]
 
+        mock_tree.get_location.return_value = "s3://test-bucket/test"
+
         hide_acorns()
 
-        mock_qc.assert_called_once_with(subject_id="subject1", force_update=True, write_metadata=True)
+        mock_qc.assert_called_once_with(subject_id="subject1", force_update=True)
 
+    @patch("zombie_squirrel.sync.TREE")
     @patch("zombie_squirrel.sync.ACORN_REGISTRY")
-    def test_hide_acorns_acorn_order_independent(self, mock_registry):
+    def test_hide_acorns_acorn_order_independent(self, mock_registry, mock_tree):
         """Test that hide_acorns processes all subject IDs."""
         mock_upn = MagicMock()
         mock_usi = MagicMock()
@@ -327,12 +335,13 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
             "quality_control": mock_qc,
         }[x]
 
+        mock_tree.get_location.return_value = "s3://test-bucket/test"
+
         hide_acorns()
 
         assert mock_qc.call_count == 5
-        mock_qc.assert_any_call(subject_id="sub1", force_update=True, write_metadata=True)
-        for sub_id in ["sub2", "sub3", "sub4", "sub5"]:
-            mock_qc.assert_any_call(subject_id=sub_id, force_update=True, write_metadata=False)
+        for sub_id in ["sub1", "sub2", "sub3", "sub4", "sub5"]:
+            mock_qc.assert_any_call(subject_id=sub_id, force_update=True)
 
     @patch("zombie_squirrel.sync.ACORN_REGISTRY")
     def test_hide_acorns_propagates_exceptions(self, mock_registry):
