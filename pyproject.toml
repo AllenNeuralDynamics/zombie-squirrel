@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "zombie-squirrel"
 description = "Generated from aind-library-template"
 license = {text = "MIT"}
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 authors = [
     {name = "Allen Institute for Neural Dynamics"}
 ]
@@ -22,6 +22,8 @@ dependencies = [
     'boto3',
     'pandas',
     'aind-data-access-api[docdb]',
+    "s3fs",
+    "zarr",
 ]
 
 [dependency-groups]
@@ -32,6 +34,7 @@ dev = [
     'Sphinx',
     'furo',
     'pre-commit',
+    'numpy',
 ]
 
 [tool.setuptools.packages.find]

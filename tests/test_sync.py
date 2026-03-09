@@ -128,14 +128,14 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
 
     @patch("zombie_squirrel.sync.TREE")
     def test_published_json_contains_six_acorns(self, mock_tree):
-        """Test published JSON contains six acorns."""
+        """Test published JSON contains seven acorns."""
         mock_tree.get_location.return_value = "s3://bucket/path"
 
         publish_squirrel_metadata()
 
         payload = json.loads(mock_tree.plant.call_args[0][1])
         self.assertIn("acorns", payload)
-        self.assertEqual(len(payload["acorns"]), 6)
+        self.assertEqual(len(payload["acorns"]), 7)
 
     @patch("zombie_squirrel.sync.TREE")
     def test_published_json_acorn_names(self, mock_tree):
@@ -152,6 +152,7 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
         self.assertIn("source_data", names)
         self.assertIn("raw_to_derived", names)
         self.assertIn("quality_control", names)
+        self.assertIn("behavior_trials", names)
 
     @patch("zombie_squirrel.sync.TREE")
     def test_qc_acorn_is_partitioned(self, mock_tree):
@@ -168,14 +169,15 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
 
     @patch("zombie_squirrel.sync.TREE")
     def test_non_qc_acorns_are_metadata_type(self, mock_tree):
-        """Test non-QC acorns are metadata type."""
+        """Test non-QC/behavior acorns are metadata type."""
         mock_tree.get_location.return_value = "s3://bucket/path"
 
         publish_squirrel_metadata()
 
         payload = json.loads(mock_tree.plant.call_args[0][1])
+        asset_type_acorns = {"quality_control", "behavior_trials"}
         for acorn in payload["acorns"]:
-            if acorn["name"] != "quality_control":
+            if acorn["name"] not in asset_type_acorns:
                 self.assertEqual(acorn["type"], "metadata")
                 self.assertFalse(acorn["partitioned"])
 
@@ -186,7 +188,7 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
 
         publish_squirrel_metadata()
 
-        self.assertEqual(mock_tree.get_location.call_count, 6)
+        self.assertEqual(mock_tree.get_location.call_count, 7)
 
     @patch("zombie_squirrel.sync.TREE")
     def test_qc_location_uses_partitioned_flag(self, mock_tree):
@@ -197,6 +199,19 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
 
         partitioned_call = call("qc", partitioned=True)
         self.assertIn(partitioned_call, mock_tree.get_location.call_args_list)
+
+    @patch("zombie_squirrel.sync.TREE")
+    def test_behavior_trials_acorn_is_partitioned(self, mock_tree):
+        """Test behavior_trials acorn is marked as partitioned with subject_id key."""
+        mock_tree.get_location.return_value = "s3://bucket/path"
+
+        publish_squirrel_metadata()
+
+        payload = json.loads(mock_tree.plant.call_args[0][1])
+        bt = next(a for a in payload["acorns"] if a["name"] == "behavior_trials")
+        self.assertTrue(bt["partitioned"])
+        self.assertEqual(bt["partition_key"], "subject_id")
+        self.assertEqual(bt["type"], "asset")
 
     @patch("zombie_squirrel.sync.TREE")
     def test_acorns_have_columns(self, mock_tree):

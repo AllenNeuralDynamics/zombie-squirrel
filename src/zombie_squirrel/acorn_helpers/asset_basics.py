@@ -70,6 +70,7 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
                 "genotype",
                 "location",
                 "name",
+                "acorn:behavior",
             ]
         )
         client = MetadataDbClient(
@@ -147,12 +148,21 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
                 "genotype": record.get("subject", {}).get("subject_details", {}).get("genotype", None),
                 "location": record.get("location", None),
                 "name": record.get("name", None),
+                "acorn:behavior": False,
             }
             records.append(flat_record)
 
-        # Combine new records with the old df and store in cache
+        # Combine new records with the old df
         new_df = pd.DataFrame(records)
         df = pd.concat([df[~df["_id"].isin(keep_ids)], new_df], ignore_index=True)
+
+        # Populate acorn:behavior from behavior_trials_index
+        behavior_index = acorns.TREE.scurry(acorns.NAMES["behavior_index"])
+        if not behavior_index.empty:
+            behavior_set = set(behavior_index[behavior_index["has_behavior"] == True]["asset_name"])  # noqa: E712
+            df["acorn:behavior"] = df["name"].isin(behavior_set)
+        else:
+            df["acorn:behavior"] = False
 
         acorns.TREE.hide(acorns.NAMES["basics"], df)
 
@@ -175,4 +185,5 @@ def asset_basics_columns() -> list[Column]:
         Column(name="genotype", description="Genotype information for the subject if available"),
         Column(name="location", description="Location of the asset in S3"),
         Column(name="name", description="Asset name"),
+        Column(name="acorn:behavior", description="True if behavior trials parquet was created for this asset"),
     ]

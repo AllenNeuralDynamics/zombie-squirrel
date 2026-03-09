@@ -39,6 +39,8 @@ NAMES = {
     "d2r": "source_data",
     "r2d": "raw_to_derived",
     "qc": "quality_control",
+    "behavior": "behavior_trials",
+    "behavior_index": "behavior_trials_index",
 }
 
 ACORN_REGISTRY: dict[str, Callable[[], Any]] = {}

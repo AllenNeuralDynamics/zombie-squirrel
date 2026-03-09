@@ -2,6 +2,7 @@
 
 from zombie_squirrel.acorn_helpers import (  # noqa: F401
     asset_basics,
+    behavior_trials,
     custom,
     qc,
     raw_to_derived,

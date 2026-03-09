@@ -7,6 +7,7 @@ metadata from the AIND metadata database with support for multiple backends.
 __version__ = "0.13.0"
 
 from zombie_squirrel.acorn_helpers.asset_basics import asset_basics  # noqa: F401
+from zombie_squirrel.acorn_helpers.behavior_trials import behavior_trials  # noqa: F401
 from zombie_squirrel.acorn_helpers.custom import custom  # noqa: F401
 from zombie_squirrel.acorn_helpers.qc import qc, qc_columns  # noqa: F401
 from zombie_squirrel.acorn_helpers.raw_to_derived import raw_to_derived  # noqa: F401
