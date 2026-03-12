@@ -3,6 +3,7 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .acorn_helpers.asset_basics import asset_basics_columns
+from .acorn_helpers.assets_smartspim import assets_smartspim_columns
 from .acorn_helpers.qc import qc_columns
 from .acorn_helpers.source_data import source_data_columns
 from .acorn_helpers.unique_project_names import unique_project_names_columns
@@ -66,6 +67,13 @@ def publish_squirrel_metadata() -> None:
             type=AcornType.asset,
             columns=qc_columns(),
         ),
+        Acorn(
+            name=NAMES["smartspim"],
+            location=TREE.get_location(NAMES["smartspim"]),
+            partitioned=False,
+            type=AcornType.metadata,
+            columns=assets_smartspim_columns(),
+        ),
     ]
     squirrel = Squirrel(acorns=acorn_list)
     TREE.plant("squirrel.json", squirrel.model_dump_json())
@@ -100,5 +108,7 @@ def hide_acorns():
         except Exception:
             for subject_id in subject_ids:
                 qc_acorn(subject_id=subject_id, force_update=True)
+
+    ACORN_REGISTRY[NAMES["smartspim"]](force_update=True)
 
     publish_squirrel_metadata()
