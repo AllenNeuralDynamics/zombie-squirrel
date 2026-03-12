@@ -39,8 +39,8 @@ def _list_channels(location: str) -> list[str]:
     return [cp["Prefix"].rstrip("/").split("/")[-1] for cp in result.get("CommonPrefixes", [])]
 
 
-def _fetch_stitched_metadata(stitched_names: list[str]) -> dict[str, dict]:
-    """Fetch metadata for stitched assets from the document DB in batches of 100."""
+def _fetch_asset_metadata(asset_names: list[str]) -> dict[str, dict]:
+    """Fetch metadata for assets (raw or stitched) from the document DB in batches of 100."""
     client = MetadataDbClient(
         host=acorns.API_GATEWAY_HOST,
         version="v2",
@@ -57,8 +57,8 @@ def _fetch_stitched_metadata(stitched_names: list[str]) -> dict[str, dict]:
     projection = {field: 1 for field in fields + ["_id"]}
     BATCH_SIZE = 100
     all_records = []
-    for i in range(0, len(stitched_names), BATCH_SIZE):
-        batch = stitched_names[i : i + BATCH_SIZE]
+    for i in range(0, len(asset_names), BATCH_SIZE):
+        batch = asset_names[i : i + BATCH_SIZE]
         batch_records = client.retrieve_docdb_records(
             filter_query={"name": {"$in": batch}},
             projection=projection,
@@ -68,12 +68,21 @@ def _fetch_stitched_metadata(stitched_names: list[str]) -> dict[str, dict]:
     return {record["name"]: record for record in all_records}
 
 
-def _build_rows(stitched_names: list[str], metadata: dict[str, dict]) -> list[dict]:
-    """Build one row per (stitched_asset, channel) from metadata and S3 channel listing."""
+MAX_CHANNELS = 3
+
+
+def _build_rows(raw_to_stitched: dict[str, str | None], metadata: dict[str, dict]) -> list[dict]:
+    """Build one row per raw asset with up to 3 channel columns.
+
+    For raw assets with a stitched derived asset, metadata and neuroglancer links
+    are pulled from the stitched record. For raw assets without one, metadata is
+    pulled from the raw record and all link/channel columns are None.
+    """
     rows = []
-    for stitched_name in stitched_names:
-        record = metadata.get(stitched_name, {})
-        location = record.get("location", "")
+    for raw_name, stitched_name in raw_to_stitched.items():
+        processed = stitched_name is not None
+        lookup_name = stitched_name if processed else raw_name
+        record = metadata.get(lookup_name, {})
 
         subject = record.get("subject", {})
         subject_id = subject.get("subject_id", None)
@@ -84,44 +93,33 @@ def _build_rows(stitched_names: list[str], metadata: dict[str, dict]) -> list[di
 
         acquisition_start_time = record.get("acquisition", {}).get("acquisition_start_time", None)
 
-        data_processes = record.get("processing", {}).get("data_processes", []) or []
-        processing_end_time = data_processes[-1].get("end_date_time", None) if data_processes else None
-
-        stitch_link = _stitched_link(location) if location else None
-
-        channels = _list_channels(location) if location else []
-
-        if not channels:
-            rows.append(
-                {
-                    "subject_id": subject_id,
-                    "genotype": genotype,
-                    "institution": institution_abbrev,
-                    "acquisition_start_time": acquisition_start_time,
-                    "processing_end_time": processing_end_time,
-                    "stitched_link": stitch_link,
-                    "channel": None,
-                    "segmentation_link": None,
-                    "quantification_link": None,
-                    "name": stitched_name,
-                }
-            )
+        if processed:
+            location = record.get("location", "")
+            data_processes = record.get("processing", {}).get("data_processes", []) or []
+            processing_end_time = data_processes[-1].get("end_date_time", None) if data_processes else None
+            stitch_link = _stitched_link(location) if location else None
+            channels = _list_channels(location) if location else []
         else:
-            for channel in channels:
-                rows.append(
-                    {
-                        "subject_id": subject_id,
-                        "genotype": genotype,
-                        "institution": institution_abbrev,
-                        "acquisition_start_time": acquisition_start_time,
-                        "processing_end_time": processing_end_time,
-                        "stitched_link": stitch_link,
-                        "channel": channel,
-                        "segmentation_link": _segmentation_link(location, channel),
-                        "quantification_link": _quantification_link(location, channel),
-                        "name": stitched_name,
-                    }
-                )
+            processing_end_time = None
+            stitch_link = None
+            channels = []
+
+        row = {
+            "subject_id": subject_id,
+            "genotype": genotype,
+            "institution": institution_abbrev,
+            "acquisition_start_time": acquisition_start_time,
+            "processing_end_time": processing_end_time,
+            "stitched_link": stitch_link,
+            "processed": processed,
+            "name": stitched_name if processed else raw_name,
+        }
+        for i in range(1, MAX_CHANNELS + 1):
+            channel = channels[i - 1] if i <= len(channels) else None
+            row[f"channel_{i}"] = channel
+            row[f"segmentation_link_{i}"] = _segmentation_link(location, channel) if (processed and channel) else None
+            row[f"quantification_link_{i}"] = _quantification_link(location, channel) if (processed and channel) else None
+        rows.append(row)
     return rows
 
 
@@ -161,7 +159,7 @@ def assets_smartspim(force_update: bool = False) -> pd.DataFrame:
         raw_spim = basics[
             (basics["data_level"] == "raw") & (basics["modalities"].str.contains("SPIM", na=False))
         ]
-        raw_spim_names = set(raw_spim["name"].dropna())
+        raw_spim_names = list(raw_spim["name"].dropna())
 
         sd = source_data()
         stitched_candidates = sd[
@@ -172,23 +170,23 @@ def assets_smartspim(force_update: bool = False) -> pd.DataFrame:
             .groupby("source_data", as_index=False)
             .first()
         )
-        stitched_names = list(stitched_candidates["name"].unique())
+        raw_to_stitched_series = stitched_candidates.set_index("source_data")["name"]
+        raw_to_stitched = {name: raw_to_stitched_series.get(name) for name in raw_spim_names}
 
-        if not stitched_names:
-            df = pd.DataFrame(columns=assets_smartspim_columns())
-            acorns.TREE.hide(acorns.NAMES["smartspim"], df)
-            return df
+        stitched_names = [v for v in raw_to_stitched.values() if v is not None]
+        raw_without_stitched = [k for k, v in raw_to_stitched.items() if v is None]
+        all_to_fetch = stitched_names + raw_without_stitched
 
         logging.info(
             SquirrelMessage(
                 tree=acorns.TREE.__class__.__name__,
                 acorn=acorns.NAMES["smartspim"],
-                message=f"Fetching metadata for {len(stitched_names)} stitched assets",
+                message=f"Fetching metadata for {len(stitched_names)} stitched and {len(raw_without_stitched)} unprocessed assets",
             ).to_json()
         )
 
-        metadata = _fetch_stitched_metadata(stitched_names)
-        rows = _build_rows(stitched_names, metadata)
+        metadata = _fetch_asset_metadata(all_to_fetch)
+        rows = _build_rows(raw_to_stitched, metadata)
         df = pd.DataFrame(rows)
 
         acorns.TREE.hide(acorns.NAMES["smartspim"], df)
@@ -197,15 +195,16 @@ def assets_smartspim(force_update: bool = False) -> pd.DataFrame:
 
 
 def assets_smartspim_columns() -> list[str]:
-    return [
+    cols = [
         "subject_id",
         "genotype",
         "institution",
         "acquisition_start_time",
         "processing_end_time",
         "stitched_link",
-        "channel",
-        "segmentation_link",
-        "quantification_link",
+        "processed",
         "name",
     ]
+    for i in range(1, MAX_CHANNELS + 1):
+        cols += [f"channel_{i}", f"segmentation_link_{i}", f"quantification_link_{i}"]
+    return cols
