@@ -5,7 +5,7 @@ import pandas as pd
 import zombie_squirrel.acorns as acorns
 
 
-def custom(name: str, force_update: bool = False, df: pd.DataFrame | None = None) -> pd.DataFrame:
+def custom(name: str, df: pd.DataFrame | None = None) -> pd.DataFrame:
     """Store or retrieve a user-defined DataFrame by name.
 
     Args:
@@ -21,9 +21,7 @@ def custom(name: str, force_update: bool = False, df: pd.DataFrame | None = None
         ValueError: If force_update is False and the cache is empty for the given name.
 
     """
-    if force_update:
-        if df is None:
-            raise ValueError("df must be provided when force_update=True.")
+    if df is not None:
         acorns.TREE.hide(name, df)
         return df
 
