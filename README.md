@@ -45,8 +45,25 @@ project_names = unique_project_names()
 | `source_data` | Fetch source data references for derived records | |
 | `raw_to_derived` | Fetch mapping of raw records to their derived records | |
 | `qc` | Fetch QC dataframe for a single or multiple records | `str` or `list[str]` |
+| `custom` | Store or retrieve a user-defined DataFrame by name | `name: str`, `df: pd.DataFrame` (optional) |
 
-### Hide the acorns
+### Custom acorn
+
+The `custom` function allows you to store and retrieve your own user-defined DataFrames in the cache by name. This requires write authentication to the active backend.
+
+```python
+from zombie_squirrel import custom
+import pandas as pd
+
+df = pd.DataFrame({"col": [1, 2, 3]})
+custom("my_data", df)
+
+retrieved_df = custom("my_data")
+```
+
+### Hide all the acorns
+
+We run a nightly capsule on Code Ocean with this code to hide all acorns (not the custom ones).
 
 ```python
 from zombie_squirrel.sync import hide_acorns
