@@ -69,6 +69,7 @@ def publish_squirrel_metadata() -> None:
         ),
         Acorn(
             name=NAMES["smartspim"],
+            description="SmartSPIM assets including processing status and neuroglancer links",
             location=TREE.get_location(NAMES["smartspim"]),
             partitioned=False,
             type=AcornType.metadata,

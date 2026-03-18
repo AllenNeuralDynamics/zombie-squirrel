@@ -9,6 +9,7 @@ from aind_data_access_api.document_db import MetadataDbClient
 import zombie_squirrel.acorns as acorns
 from zombie_squirrel.acorn_helpers.asset_basics import asset_basics
 from zombie_squirrel.acorn_helpers.source_data import source_data
+from zombie_squirrel.squirrel import Column
 from zombie_squirrel.utils import SquirrelMessage, setup_logging
 
 NEUROGLANCER_BASE = "https://neuroglancer-demo.appspot.com/#!"
@@ -194,17 +195,23 @@ def assets_smartspim(force_update: bool = False) -> pd.DataFrame:
     return df
 
 
-def assets_smartspim_columns() -> list[str]:
-    cols = [
-        "subject_id",
-        "genotype",
-        "institution",
-        "acquisition_start_time",
-        "processing_end_time",
-        "stitched_link",
-        "processed",
-        "name",
+def assets_smartspim_columns() -> list[Column]:
+    return [
+        Column(name="subject_id", description="Subject for the asset"),
+        Column(name="genotype", description="Subject genotype"),
+        Column(name="institution", description="Institution abbreviation"),
+        Column(name="acquisition_start_time", description="Acquisition start time"),
+        Column(name="processing_end_time", description="Processing end time for stitched asset"),
+        Column(name="stitched_link", description="Neuroglancer link to stitched asset"),
+        Column(name="processed", description="Whether a stitched derived asset exists"),
+        Column(name="name", description="Asset name (stitched if available, otherwise raw)"),
+        Column(name="channel_1", description="First channel name"),
+        Column(name="segmentation_link_1", description="Neuroglancer segmentation link for channel 1"),
+        Column(name="quantification_link_1", description="Neuroglancer quantification link for channel 1"),
+        Column(name="channel_2", description="Second channel name"),
+        Column(name="segmentation_link_2", description="Neuroglancer segmentation link for channel 2"),
+        Column(name="quantification_link_2", description="Neuroglancer quantification link for channel 2"),
+        Column(name="channel_3", description="Third channel name"),
+        Column(name="segmentation_link_3", description="Neuroglancer segmentation link for channel 3"),
+        Column(name="quantification_link_3", description="Neuroglancer quantification link for channel 3"),
     ]
-    for i in range(1, MAX_CHANNELS + 1):
-        cols += [f"channel_{i}", f"segmentation_link_{i}", f"quantification_link_{i}"]
-    return cols
