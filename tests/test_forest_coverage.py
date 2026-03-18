@@ -35,7 +35,7 @@ class TestS3TreeGetLocation(unittest.TestCase):
         tree = S3Tree()
         result = tree.get_location("my_table", partitioned=True)
 
-        self.assertIn("zombie-squirrel/zs_my_table/", result)
+        self.assertIn("data-asset-cache/zs_my_table/", result)
         self.assertTrue(result.startswith("s3://"))
 
     @patch("zombie_squirrel.forest.boto3")
@@ -47,7 +47,7 @@ class TestS3TreeGetLocation(unittest.TestCase):
         tree = S3Tree()
         result = tree.get_location("my_table", partitioned=False)
 
-        self.assertIn("zombie-squirrel/", result)
+        self.assertIn("data-asset-cache/", result)
         self.assertTrue(result.startswith("s3://"))
         self.assertNotIn("zs_my_table/", result)
 

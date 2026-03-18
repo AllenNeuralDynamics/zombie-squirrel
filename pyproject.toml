@@ -20,7 +20,7 @@ dependencies = [
     'duckdb',
     'pyarrow',
     'boto3',
-    'pandas',
+    'pandas>=2.2.0',
     'aind-data-access-api[docdb]',
 ]
 

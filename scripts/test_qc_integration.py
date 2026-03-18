@@ -6,7 +6,7 @@ import boto3
 import duckdb
 
 BUCKET = "allen-data-views"
-QC_PREFIX = "zombie-squirrel/zs_qc/"
+QC_PREFIX = "data-asset-cache/zs_qc/"
 TIMESTAMP_COLUMN = "timestamp"
 EXPECTED_TYPE = "TIMESTAMP WITH TIME ZONE"
 

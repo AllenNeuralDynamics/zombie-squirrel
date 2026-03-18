@@ -46,7 +46,7 @@ def get_s3_cache_path(filename: str) -> str:
         filename: The cache filename (e.g., "zs_unique_project_names.pqt").
 
     Returns:
-        Full S3 path: zombie-squirrel/filename
+        Full S3 path: data-asset-cache/filename
 
     """
-    return f"zombie-squirrel/{filename}"
+    return f"data-asset-cache/{filename}"
