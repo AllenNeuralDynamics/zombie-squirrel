@@ -52,7 +52,7 @@ class S3Tree(Tree):
 
     def __init__(self) -> None:
         """Initialize S3Acorn with S3 client."""
-        self.bucket = "aind-scratch-data"
+        self.bucket = "allen-data-views"
         self.s3_client = boto3.client("s3")
 
     def hide(self, table_name: str, data: pd.DataFrame) -> None:
@@ -79,7 +79,7 @@ class S3Tree(Tree):
 
         metadata = {"columns": data.columns.tolist()}
         if table_name.startswith("qc/"):
-            json_key = "application-caches/zs_qc.json"
+            json_key = "zombie-squirrel/zs_qc.json"
         else:
             json_filename = filename.replace(".pqt", ".json")
             json_key = get_s3_cache_path(json_filename)
@@ -128,14 +128,14 @@ class S3Tree(Tree):
     def get_location(self, table_name: str, partitioned: bool = False) -> str:
         """Return the S3 URI for a given table."""
         if partitioned:
-            return f"s3://{self.bucket}/application-caches/zs_{table_name}/"
+            return f"s3://{self.bucket}/zombie-squirrel/zs_{table_name}/"
         filename = prefix_table_name(table_name)
         s3_key = get_s3_cache_path(filename)
         return f"s3://{self.bucket}/{s3_key}"
 
     def plant(self, key: str, data: str) -> None:  # pragma: no cover
-        """Write a JSON string to the application-caches root in S3."""
-        s3_key = f"application-caches/{key}"
+        """Write a JSON string to the zombie-squirrel root in S3."""
+        s3_key = f"zombie-squirrel/{key}"
         self.s3_client.put_object(
             Bucket=self.bucket,
             Key=s3_key,

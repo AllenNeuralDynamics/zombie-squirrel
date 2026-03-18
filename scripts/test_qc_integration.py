@@ -5,8 +5,8 @@ import unittest
 import boto3
 import duckdb
 
-BUCKET = "aind-scratch-data"
-QC_PREFIX = "application-caches/zs_qc/"
+BUCKET = "allen-data-views"
+QC_PREFIX = "zombie-squirrel/zs_qc/"
 TIMESTAMP_COLUMN = "timestamp"
 EXPECTED_TYPE = "TIMESTAMP WITH TIME ZONE"
 

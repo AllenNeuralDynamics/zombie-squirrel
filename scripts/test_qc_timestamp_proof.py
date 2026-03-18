@@ -11,7 +11,7 @@ from zombie_squirrel import qc
 from zombie_squirrel.acorns import TREE
 
 SUBJECT_ID = "818323"
-BUCKET = "aind-scratch-data"
+BUCKET = "allen-data-views"
 
 
 class TestQCTimestampProof(unittest.TestCase):

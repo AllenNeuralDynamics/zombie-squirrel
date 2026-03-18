@@ -150,7 +150,7 @@ class TestS3Tree(unittest.TestCase):
 
         acorn = S3Tree()
 
-        self.assertEqual(acorn.bucket, "aind-scratch-data")
+        self.assertEqual(acorn.bucket, "allen-data-views")
         self.assertEqual(acorn.s3_client, mock_s3_client)
         mock_boto3_client.assert_called_once_with("s3")
 
@@ -168,13 +168,13 @@ class TestS3Tree(unittest.TestCase):
         self.assertEqual(mock_s3_client.put_object.call_count, 2)
 
         parquet_call = mock_s3_client.put_object.call_args_list[0][1]
-        self.assertEqual(parquet_call["Bucket"], "aind-scratch-data")
-        self.assertEqual(parquet_call["Key"], "application-caches/zs_test_table.pqt")
+        self.assertEqual(parquet_call["Bucket"], "allen-data-views")
+        self.assertEqual(parquet_call["Key"], "zombie-squirrel/zs_test_table.pqt")
         self.assertIsInstance(parquet_call["Body"], bytes)
 
         json_call = mock_s3_client.put_object.call_args_list[1][1]
-        self.assertEqual(json_call["Bucket"], "aind-scratch-data")
-        self.assertEqual(json_call["Key"], "application-caches/zs_test_table.json")
+        self.assertEqual(json_call["Bucket"], "allen-data-views")
+        self.assertEqual(json_call["Key"], "zombie-squirrel/zs_test_table.json")
         self.assertIn("columns", json_call["Body"])
 
     @patch("zombie_squirrel.forest.boto3.client")
@@ -191,8 +191,8 @@ class TestS3Tree(unittest.TestCase):
         self.assertEqual(mock_s3_client.put_object.call_count, 2)
 
         json_call = mock_s3_client.put_object.call_args_list[1][1]
-        self.assertEqual(json_call["Bucket"], "aind-scratch-data")
-        self.assertEqual(json_call["Key"], "application-caches/zs_qc.json")
+        self.assertEqual(json_call["Bucket"], "allen-data-views")
+        self.assertEqual(json_call["Key"], "zombie-squirrel/zs_qc.json")
         self.assertIn("columns", json_call["Body"])
         self.assertIn("metric", json_call["Body"])
 
@@ -215,7 +215,7 @@ class TestS3Tree(unittest.TestCase):
         mock_duckdb_query.assert_called_once()
         query_call = mock_duckdb_query.call_args[0][0]
         self.assertIn(
-            "s3://aind-scratch-data/application-caches/zs_test_table.pqt",
+            "s3://allen-data-views/zombie-squirrel/zs_test_table.pqt",
             query_call,
         )
         pd.testing.assert_frame_equal(result, expected_df)

@@ -43,12 +43,12 @@ class TestGetS3CachePath(unittest.TestCase):
     def test_get_s3_cache_path_basic(self):
         """Test that get_s3_cache_path constructs correct S3 path."""
         result = get_s3_cache_path("zs_test.pqt")
-        self.assertEqual(result, "application-caches/zs_test.pqt")
+        self.assertEqual(result, "zombie-squirrel/zs_test.pqt")
 
     def test_get_s3_cache_path_various_names(self):
         """Test with various filenames."""
         result = get_s3_cache_path("zs_my_data.pqt")
-        self.assertEqual(result, "application-caches/zs_my_data.pqt")
+        self.assertEqual(result, "zombie-squirrel/zs_my_data.pqt")
 
 
 if __name__ == "__main__":
