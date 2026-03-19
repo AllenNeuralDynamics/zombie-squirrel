@@ -99,10 +99,26 @@ class S3Tree(Tree):
             return self._scurry_multiple(table_name)
         return self._scurry_single(table_name)
 
+    def _s3_key_exists(self, s3_key: str) -> bool:
+        """Return True if the S3 object exists."""
+        try:
+            self.s3_client.head_object(Bucket=self.bucket, Key=s3_key)
+            return True
+        except self.s3_client.exceptions.ClientError:
+            return False
+
     def _scurry_single(self, table_name: str) -> pd.DataFrame:
         """Fetch a single table from S3."""
         filename = prefix_table_name(table_name)
         s3_key = get_s3_cache_path(filename)
+
+        if not self._s3_key_exists(s3_key):
+            logging.warning(
+                SquirrelMessage(
+                    tree="S3Tree", acorn=table_name, message=f"Cache not found: {s3_key}"
+                ).to_json()
+            )
+            return pd.DataFrame()
 
         try:
             query = f"""
