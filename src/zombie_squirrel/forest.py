@@ -46,6 +46,11 @@ class Tree(ABC):
         """Write a JSON string to the storage root under the given key."""
         pass  # pragma: no cover
 
+    @abstractmethod
+    def fetch(self, key: str) -> str:
+        """Read a JSON string from the storage root under the given key."""
+        pass  # pragma: no cover
+
 
 class S3Tree(Tree):
     """Stores and retrieves caches using AWS S3 with parquet files."""
@@ -148,6 +153,12 @@ class S3Tree(Tree):
             ).to_json()
         )
 
+    def fetch(self, key: str) -> str:  # pragma: no cover
+        """Read a JSON string from the zombie-squirrel root in S3."""
+        s3_key = f"data-asset-cache/{key}"
+        response = self.s3_client.get_object(Bucket=self.bucket, Key=s3_key)
+        return response["Body"].read().decode()
+
     def _scurry_multiple(self, table_names: list[str]) -> pd.DataFrame:
         """Fetch and merge multiple tables from S3."""
         parquet_paths = []
@@ -230,6 +241,10 @@ class MemoryTree(Tree):
             SquirrelMessage(tree="MemoryTree", acorn=key, message=f"Storing metadata in memory for {key}").to_json()
         )
         self._json_store[key] = data
+
+    def fetch(self, key: str) -> str:
+        """Read a JSON string from the in-memory JSON store."""
+        return self._json_store.get(key, "{}")
 
     def _scurry_multiple(self, table_names: list[str]) -> pd.DataFrame:
         """Fetch and merge multiple tables from memory."""

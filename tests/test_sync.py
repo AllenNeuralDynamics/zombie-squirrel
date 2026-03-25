@@ -12,7 +12,7 @@ from zombie_squirrel.sync import hide_acorns, publish_squirrel_metadata
 class TestHideAcorns(unittest.TestCase):
     """Test hide_acorns function."""
 
-    def _make_registry(self, mock_upn, mock_usi, mock_basics, mock_d2r, mock_r2d, mock_qc):
+    def _make_registry(self, mock_upn, mock_usi, mock_basics, mock_d2r, mock_r2d, mock_qc, mock_smartspim):
         """Create mock acorn registry dict."""
         return {
             "unique_project_names": mock_upn,
@@ -21,6 +21,7 @@ class TestHideAcorns(unittest.TestCase):
             "source_data": mock_d2r,
             "raw_to_derived": mock_r2d,
             "quality_control": mock_qc,
+            "assets_smartspim": mock_smartspim,
         }
 
     @patch("zombie_squirrel.sync.publish_squirrel_metadata")
@@ -34,8 +35,9 @@ class TestHideAcorns(unittest.TestCase):
         mock_d2r = MagicMock()
         mock_r2d = MagicMock()
         mock_qc = MagicMock()
+        mock_smartspim = MagicMock()
         mock_registry.__getitem__.side_effect = self._make_registry(
-            mock_upn, mock_usi, mock_basics, mock_d2r, mock_r2d, mock_qc
+            mock_upn, mock_usi, mock_basics, mock_d2r, mock_r2d, mock_qc, mock_smartspim
         ).__getitem__
 
         hide_acorns()
@@ -45,6 +47,7 @@ class TestHideAcorns(unittest.TestCase):
         mock_basics.assert_called_once_with(force_update=True)
         mock_d2r.assert_called_once_with(force_update=True)
         mock_r2d.assert_not_called()
+        mock_smartspim.assert_called_once_with(force_update=True)
 
     @patch("zombie_squirrel.sync.publish_squirrel_metadata")
     @patch("zombie_squirrel.sync.ACORN_REGISTRY")
@@ -54,7 +57,7 @@ class TestHideAcorns(unittest.TestCase):
         mock_basics = MagicMock(return_value=df_basics)
         mock_qc = MagicMock()
         mock_registry.__getitem__.side_effect = self._make_registry(
-            MagicMock(), MagicMock(), mock_basics, MagicMock(), MagicMock(), mock_qc
+            MagicMock(), MagicMock(), mock_basics, MagicMock(), MagicMock(), mock_qc, MagicMock()
         ).__getitem__
 
         hide_acorns()
@@ -76,7 +79,7 @@ class TestHideAcorns(unittest.TestCase):
         mock_basics = MagicMock(return_value=df_basics)
         mock_qc = MagicMock()
         mock_registry.__getitem__.side_effect = self._make_registry(
-            MagicMock(), MagicMock(), mock_basics, MagicMock(), MagicMock(), mock_qc
+            MagicMock(), MagicMock(), mock_basics, MagicMock(), MagicMock(), mock_qc, MagicMock()
         ).__getitem__
 
         hide_acorns()
@@ -90,7 +93,7 @@ class TestHideAcorns(unittest.TestCase):
         df_basics = pd.DataFrame({"subject_id": ["sub1"]})
         mock_basics = MagicMock(return_value=df_basics)
         mock_registry.__getitem__.side_effect = self._make_registry(
-            MagicMock(), MagicMock(), mock_basics, MagicMock(), MagicMock(), MagicMock()
+            MagicMock(), MagicMock(), mock_basics, MagicMock(), MagicMock(), MagicMock(), MagicMock()
         ).__getitem__
 
         hide_acorns()
@@ -103,7 +106,7 @@ class TestHideAcorns(unittest.TestCase):
         """Test exceptions from acorns propagate to caller."""
         mock_upn = MagicMock(side_effect=Exception("Update failed"))
         mock_registry.__getitem__.side_effect = self._make_registry(
-            mock_upn, MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
+            mock_upn, MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()
         ).__getitem__
 
         with self.assertRaises(Exception) as ctx:
@@ -127,15 +130,15 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
         self.assertEqual(key, "squirrel.json")
 
     @patch("zombie_squirrel.sync.TREE")
-    def test_published_json_contains_six_acorns(self, mock_tree):
-        """Test published JSON contains six acorns."""
+    def test_published_json_contains_seven_acorns(self, mock_tree):
+        """Test published JSON contains seven acorns."""
         mock_tree.get_location.return_value = "s3://bucket/path"
 
         publish_squirrel_metadata()
 
         payload = json.loads(mock_tree.plant.call_args[0][1])
         self.assertIn("acorns", payload)
-        self.assertEqual(len(payload["acorns"]), 6)
+        self.assertEqual(len(payload["acorns"]), 7)
 
     @patch("zombie_squirrel.sync.TREE")
     def test_published_json_acorn_names(self, mock_tree):
@@ -152,6 +155,7 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
         self.assertIn("source_data", names)
         self.assertIn("raw_to_derived", names)
         self.assertIn("quality_control", names)
+        self.assertIn("assets_smartspim", names)
 
     @patch("zombie_squirrel.sync.TREE")
     def test_qc_acorn_is_partitioned(self, mock_tree):
@@ -186,7 +190,7 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
 
         publish_squirrel_metadata()
 
-        self.assertEqual(mock_tree.get_location.call_count, 6)
+        self.assertEqual(mock_tree.get_location.call_count, 7)
 
     @patch("zombie_squirrel.sync.TREE")
     def test_qc_location_uses_partitioned_flag(self, mock_tree):
@@ -226,6 +230,7 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
         mock_df = pd.DataFrame({"subject_id": ["subject1", "subject2"]})
         mock_basics.return_value = mock_df
 
+        mock_smartspim = MagicMock()
         mock_registry.__getitem__.side_effect = lambda x: {
             "unique_project_names": mock_upn,
             "unique_subject_ids": mock_usi,
@@ -233,6 +238,7 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
             "source_data": mock_d2r,
             "raw_to_derived": mock_r2d,
             "quality_control": mock_qc,
+            "assets_smartspim": mock_smartspim,
         }[x]
 
         mock_tree.get_location.return_value = "s3://test-bucket/test"
@@ -269,6 +275,7 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
             "source_data": mock_d2r,
             "raw_to_derived": mock_r2d,
             "quality_control": mock_qc,
+            "assets_smartspim": MagicMock(),
         }[x]
 
         mock_tree.get_location.return_value = "s3://test-bucket/test"
@@ -303,6 +310,7 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
             "source_data": mock_d2r,
             "raw_to_derived": mock_r2d,
             "quality_control": mock_qc,
+            "assets_smartspim": MagicMock(),
         }[x]
 
         mock_tree.get_location.return_value = "s3://test-bucket/test"
@@ -333,6 +341,7 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
             "source_data": mock_d2r,
             "raw_to_derived": mock_r2d,
             "quality_control": mock_qc,
+            "assets_smartspim": MagicMock(),
         }[x]
 
         mock_tree.get_location.return_value = "s3://test-bucket/test"
@@ -360,6 +369,7 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
             "source_data": mock_d2r,
             "raw_to_derived": mock_r2d,
             "quality_control": mock_qc,
+            "assets_smartspim": MagicMock(),
         }[x]
 
         with self.assertRaises(Exception) as context:

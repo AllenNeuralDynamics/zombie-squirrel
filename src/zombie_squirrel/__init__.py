@@ -2,6 +2,8 @@
 
 Provides functions to fetch and cache project names, subject IDs, and asset
 metadata from the AIND metadata database with support for multiple backends.
+Also exposes get_squirrel_info to retrieve the squirrel.json registry of all
+available acorns and their metadata.
 """
 
 __version__ = "0.15.3"
@@ -18,3 +20,4 @@ from zombie_squirrel.acorn_helpers.unique_project_names import (  # noqa: F401
 from zombie_squirrel.acorn_helpers.unique_subject_ids import (  # noqa: F401
     unique_subject_ids,
 )
+from zombie_squirrel.utils import get_squirrel_info  # noqa: F401

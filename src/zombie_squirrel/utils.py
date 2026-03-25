@@ -50,3 +50,12 @@ def get_s3_cache_path(filename: str) -> str:
 
     """
     return f"data-asset-cache/{filename}"
+
+
+def get_squirrel_info():
+    """Fetch and return the Squirrel metadata from the active tree."""
+    import zombie_squirrel.acorns as acorns
+    from zombie_squirrel.squirrel import Squirrel
+
+    data = acorns.TREE.fetch("squirrel.json")
+    return Squirrel.model_validate_json(data)

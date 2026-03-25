@@ -39,6 +39,8 @@ project_names = unique_project_names()
 
 #### Acorns
 
+`get_squirrel_info` returns the following information about all available acorns:
+
 | Acorn | Description | Location | Type | Partitioned | Columns |
 | ----- | ----------- | -------- | ---- | ----------- | ------- |
 | `unique_project_names` | Unique project names across all assets | `s3://allen-data-views/data-asset-cache/zs_unique_project_names.pqt` | metadata | False | `project_name` |
@@ -48,7 +50,6 @@ project_names = unique_project_names()
 | `raw_to_derived` | Mapping from raw asset names to their derived asset names | `s3://allen-data-views/data-asset-cache/zs_raw_to_derived.pqt` | metadata | False | — |
 | `quality_control` | Quality control table with one row per QC metric | `s3://allen-data-views/data-asset-cache/zs_qc/` | asset | True (by `subject_id`) | `name`, `stage`, `modality`, `value`, `status`, `asset_name` |
 | `assets_smartspim` | SmartSPIM assets with processing status and neuroglancer links | `s3://allen-data-views/data-asset-cache/zs_assets_smartspim.pqt` | metadata | False | `subject_id`, `genotype`, `institution`, `acquisition_start_time`, `processing_end_time`, `stitched_link`, `processed`, `name`, `channel_1`, `segmentation_link_1`, `quantification_link_1`, `channel_2`, `segmentation_link_2`, `quantification_link_2`, `channel_3`, `segmentation_link_3`, `quantification_link_3` |
-
 
 ### Custom acorn
 

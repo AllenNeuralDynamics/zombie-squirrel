@@ -12,19 +12,12 @@ class TestCustomAcorn(unittest.TestCase):
     """Tests for custom acorn."""
 
     @patch("zombie_squirrel.acorn_helpers.custom.acorns.TREE")
-    def test_force_update_stores_and_returns_df(self, mock_tree):
-        """Test that force_update stores the DataFrame and returns it."""
+    def test_df_provided_stores_and_returns_df(self, mock_tree):
+        """Test that providing a df stores it and returns it."""
         df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
-        result = custom(name="my_acorn", force_update=True, df=df)
+        result = custom(name="my_acorn", df=df)
         mock_tree.hide.assert_called_once_with("my_acorn", df)
         pd.testing.assert_frame_equal(result, df)
-
-    @patch("zombie_squirrel.acorn_helpers.custom.acorns.TREE")
-    def test_force_update_without_df_raises(self, mock_tree):
-        """Test that force_update=True without df raises ValueError."""
-        with self.assertRaises(ValueError, msg="df must be provided when force_update=True."):
-            custom(name="my_acorn", force_update=True)
-        mock_tree.hide.assert_not_called()
 
     @patch("zombie_squirrel.acorn_helpers.custom.acorns.TREE")
     def test_retrieval_returns_cached_df(self, mock_tree):

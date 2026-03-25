@@ -344,7 +344,7 @@ class TestAssetsSmartspimColumns(unittest.TestCase):
     def test_returns_expected_columns(self):
         cols = assets_smartspim_columns()
         self.assertEqual(
-            cols,
+            [col.name for col in cols],
             [
                 "subject_id",
                 "genotype",
