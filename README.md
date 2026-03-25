@@ -37,15 +37,18 @@ from zombie_squirrel import unique_project_names
 project_names = unique_project_names()
 ```
 
-| Function | Description | Parameters |
-| -------- | ----------- | ---------- |
-| `unique_project_names` | Fetch unique project names from docdb | |
-| `unique_subject_ids` | Fetch unique subject IDs from docdb | |
-| `asset_basics` | Fetch basic asset metadata including modalities, projects, and subject info | |
-| `source_data` | Fetch source data references for derived records | |
-| `raw_to_derived` | Fetch mapping of raw records to their derived records | |
-| `qc` | Fetch QC dataframe for a single or multiple records | `str` or `list[str]` |
-| `custom` | Store or retrieve a user-defined DataFrame by name | `name: str`, `df: pd.DataFrame` (optional) |
+#### Acorns
+
+| Acorn | Description | Location | Type | Partitioned | Columns |
+| ----- | ----------- | -------- | ---- | ----------- | ------- |
+| `unique_project_names` | Unique project names across all assets | `s3://allen-data-views/data-asset-cache/zs_unique_project_names.pqt` | metadata | False | `project_name` |
+| `unique_subject_ids` | Unique subject_ids across all assets | `s3://allen-data-views/data-asset-cache/zs_unique_subject_ids.pqt` | metadata | False | `subject_id` |
+| `asset_basics` | Commonly used asset metadata, one row per data asset | `s3://allen-data-views/data-asset-cache/zs_asset_basics.pqt` | metadata | False | `_id`, `_last_modified`, `modalities`, `project_name`, `data_level`, `subject_id`, `acquisition_start_time`, `acquisition_end_time`, `code_ocean`, `process_date`, `genotype`, `location`, `name` |
+| `source_data` | Mapping from derived asset names to their source raw asset names | `s3://allen-data-views/data-asset-cache/zs_source_data.pqt` | metadata | False | `name`, `source_data`, `pipeline_name`, `processing_time` |
+| `raw_to_derived` | Mapping from raw asset names to their derived asset names | `s3://allen-data-views/data-asset-cache/zs_raw_to_derived.pqt` | metadata | False | — |
+| `quality_control` | Quality control table with one row per QC metric | `s3://allen-data-views/data-asset-cache/zs_qc/` | asset | True (by `subject_id`) | `name`, `stage`, `modality`, `value`, `status`, `asset_name` |
+| `assets_smartspim` | SmartSPIM assets with processing status and neuroglancer links | `s3://allen-data-views/data-asset-cache/zs_assets_smartspim.pqt` | metadata | False | `subject_id`, `genotype`, `institution`, `acquisition_start_time`, `processing_end_time`, `stitched_link`, `processed`, `name`, `channel_1`, `segmentation_link_1`, `quantification_link_1`, `channel_2`, `segmentation_link_2`, `quantification_link_2`, `channel_3`, `segmentation_link_3`, `quantification_link_3` |
+
 
 ### Custom acorn
 
