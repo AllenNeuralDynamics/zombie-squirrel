@@ -52,13 +52,6 @@ def publish_squirrel_metadata() -> None:
             columns=source_data_columns(),
         ),
         Acorn(
-            name=NAMES["r2d"],
-            description="Mapping from raw asset names to their derived asset names",
-            location=TREE.get_location(NAMES["r2d"]),
-            partitioned=False,
-            type=AcornType.metadata,
-        ),
-        Acorn(
             name=NAMES["qc"],
             description="Quality control table with one row per QC metric, partitioned by subject_id",
             location=TREE.get_location("qc", partitioned=True),

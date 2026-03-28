@@ -130,15 +130,15 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
         self.assertEqual(key, "squirrel.json")
 
     @patch("zombie_squirrel.sync.TREE")
-    def test_published_json_contains_seven_acorns(self, mock_tree):
-        """Test published JSON contains seven acorns."""
+    def test_published_json_contains_six_acorns(self, mock_tree):
+        """Test published JSON contains six acorns."""
         mock_tree.get_location.return_value = "s3://bucket/path"
 
         publish_squirrel_metadata()
 
         payload = json.loads(mock_tree.plant.call_args[0][1])
         self.assertIn("acorns", payload)
-        self.assertEqual(len(payload["acorns"]), 7)
+        self.assertEqual(len(payload["acorns"]), 6)
 
     @patch("zombie_squirrel.sync.TREE")
     def test_published_json_acorn_names(self, mock_tree):
@@ -153,7 +153,6 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
         self.assertIn("unique_subject_ids", names)
         self.assertIn("asset_basics", names)
         self.assertIn("source_data", names)
-        self.assertIn("raw_to_derived", names)
         self.assertIn("quality_control", names)
         self.assertIn("assets_smartspim", names)
 
@@ -190,7 +189,7 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
 
         publish_squirrel_metadata()
 
-        self.assertEqual(mock_tree.get_location.call_count, 7)
+        self.assertEqual(mock_tree.get_location.call_count, 6)
 
     @patch("zombie_squirrel.sync.TREE")
     def test_qc_location_uses_partitioned_flag(self, mock_tree):
@@ -212,8 +211,7 @@ class TestPublishSquirrelMetadata(unittest.TestCase):
         payload = json.loads(mock_tree.plant.call_args[0][1])
         for acorn in payload["acorns"]:
             self.assertIsInstance(acorn["columns"], list)
-            if acorn["name"] != "raw_to_derived":
-                self.assertGreater(len(acorn["columns"]), 0)
+            self.assertGreater(len(acorn["columns"]), 0)
 
     @patch("zombie_squirrel.sync.TREE")
     @patch("zombie_squirrel.sync.ACORN_REGISTRY")
