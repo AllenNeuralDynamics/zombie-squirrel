@@ -47,9 +47,10 @@ project_names = unique_project_names()
 | `unique_subject_ids` | Unique subject_ids across all assets | `s3://allen-data-views/data-asset-cache/zs_unique_subject_ids.pqt` | metadata | False | `subject_id` |
 | `asset_basics` | Commonly used asset metadata, one row per data asset | `s3://allen-data-views/data-asset-cache/zs_asset_basics.pqt` | metadata | False | `_id`, `_last_modified`, `modalities`, `project_name`, `data_level`, `subject_id`, `acquisition_start_time`, `acquisition_end_time`, `code_ocean`, `process_date`, `genotype`, `location`, `name` |
 | `source_data` | Mapping from derived asset names to their source raw asset names | `s3://allen-data-views/data-asset-cache/zs_source_data.pqt` | metadata | False | `name`, `source_data`, `pipeline_name`, `processing_time` |
-| `raw_to_derived` | Mapping from raw asset names to their derived asset names | `s3://allen-data-views/data-asset-cache/zs_raw_to_derived.pqt` | metadata | False | — |
 | `quality_control` | Quality control table with one row per QC metric | `s3://allen-data-views/data-asset-cache/zs_qc/` | asset | True (by `subject_id`) | `name`, `stage`, `modality`, `value`, `status`, `asset_name` |
 | `assets_smartspim` | SmartSPIM assets with processing status and neuroglancer links | `s3://allen-data-views/data-asset-cache/zs_assets_smartspim.pqt` | metadata | False | `subject_id`, `genotype`, `institution`, `acquisition_start_time`, `processing_end_time`, `stitched_link`, `processed`, `name`, `channel_1`, `segmentation_link_1`, `quantification_link_1`, `channel_2`, `segmentation_link_2`, `quantification_link_2`, `channel_3`, `segmentation_link_3`, `quantification_link_3` |
+
+The `raw_to_derived` function is not a table stored in S3, instead it is used by passing an asset_name (or list of asset names) and a modality. The function returns the latest derived asset matching the requested pattern.
 
 ### Custom acorn
 
