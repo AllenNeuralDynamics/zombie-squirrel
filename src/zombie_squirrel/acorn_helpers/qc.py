@@ -159,7 +159,8 @@ def _fetch_subject_qc(subject_id: str) -> pd.DataFrame:
                 if col == "modality" and isinstance(value, dict):
                     value = value.get("abbreviation", None)
                 elif col == "status_history" and isinstance(value, list) and len(value) > 0:
-                    value = value[-1].get("status", None) if isinstance(value[-1], dict) else None
+                    metric_data["status"] = value[-1].get("status", None) if isinstance(value[-1], dict) else None
+                    continue
                 elif col == "value":
                     if isinstance(value, dict):
                         value = "{dict}"
