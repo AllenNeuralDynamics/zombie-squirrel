@@ -38,6 +38,9 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
         "subject.subject_id",
         "acquisition.acquisition_start_time",
         "acquisition.acquisition_end_time",
+        "acquisition.acquisition_type",
+        "acquisition.subject_details.date_of_birth",
+        "acquisition.subject_details.year_of_birth",
         "processing.data_processes.start_date_time",
         "subject.subject_details.genotype",
         "other_identifiers",
@@ -68,6 +71,8 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
                 "code_ocean",
                 "process_date",
                 "genotype",
+                "age",
+                "acquisition_type",
                 "location",
                 "name",
             ]
@@ -133,6 +138,23 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
             else:
                 code_ocean = None
 
+            # Calculate age in days from acquisition_start_time and date_of_birth or year_of_birth
+            acquisition_start = record.get("acquisition", {}).get("acquisition_start_time", None)
+            acq_subject_details = record.get("acquisition", {}).get("subject_details", {}) or {}
+            date_of_birth = acq_subject_details.get("date_of_birth", None)
+            year_of_birth = acq_subject_details.get("year_of_birth", None)
+            age = None
+            if acquisition_start and (date_of_birth or year_of_birth):
+                try:
+                    acq_date = pd.to_datetime(acquisition_start)
+                    if date_of_birth:
+                        dob = pd.to_datetime(date_of_birth)
+                    else:
+                        dob = pd.Timestamp(int(year_of_birth), 1, 1)
+                    age = (acq_date - dob).days
+                except Exception:
+                    age = None
+
             flat_record = {
                 "_id": record["_id"],
                 "_last_modified": record.get("_last_modified", None),
@@ -145,6 +167,8 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
                 "code_ocean": code_ocean,
                 "process_date": process_date,
                 "genotype": record.get("subject", {}).get("subject_details", {}).get("genotype", None),
+                "age": age,
+                "acquisition_type": record.get("acquisition", {}).get("acquisition_type", None),
                 "location": record.get("location", None),
                 "name": record.get("name", None),
             }
@@ -173,6 +197,11 @@ def asset_basics_columns() -> list[Column]:
         Column(name="code_ocean", description="Code Ocean asset ID if available"),
         Column(name="process_date", description="Date of latest processing in YYYY-MM-DD format"),
         Column(name="genotype", description="Genotype information for the subject if available"),
+        Column(
+            name="age",
+            description="Age of the subject in days at time of acquisition, derived from date_of_birth or year_of_birth",
+        ),
+        Column(name="acquisition_type", description="Acquisition type (e.g. multiplane-2photon)"),
         Column(name="location", description="Location of the asset in S3"),
         Column(name="name", description="Asset name"),
     ]

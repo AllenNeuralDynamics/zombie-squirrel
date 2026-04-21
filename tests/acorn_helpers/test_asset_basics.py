@@ -221,6 +221,92 @@ class TestAssetBasics(unittest.TestCase):
         self.assertEqual(result.iloc[0]["_id"], "id1")
         self.assertEqual(result.iloc[0]["code_ocean"], ["df429003-91a0-45d2-8457-66b156ad8bfa"])
 
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.MetadataDbClient")
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.acorns.TREE")
+    def test_age_calculated_from_date_of_birth(self, mock_tree, mock_client_class):
+        """Test age is calculated in days from date_of_birth."""
+        mock_tree.scurry.return_value = pd.DataFrame()
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "id1",
+                "_last_modified": "2023-01-01",
+                "data_description": {},
+                "acquisition": {
+                    "acquisition_start_time": "2023-06-01T00:00:00",
+                    "subject_details": {"date_of_birth": "2023-01-01"},
+                },
+            }
+        ]
+
+        result = asset_basics(force_update=True)
+
+        self.assertEqual(result.iloc[0]["age"], 151)
+
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.MetadataDbClient")
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.acorns.TREE")
+    def test_age_calculated_from_year_of_birth(self, mock_tree, mock_client_class):
+        """Test age is calculated in days from Jan 1 of year_of_birth when no date_of_birth."""
+        mock_tree.scurry.return_value = pd.DataFrame()
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "id1",
+                "_last_modified": "2023-01-01",
+                "data_description": {},
+                "acquisition": {
+                    "acquisition_start_time": "2023-06-01T00:00:00",
+                    "subject_details": {"year_of_birth": 2023},
+                },
+            }
+        ]
+
+        result = asset_basics(force_update=True)
+
+        self.assertEqual(result.iloc[0]["age"], 151)
+
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.MetadataDbClient")
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.acorns.TREE")
+    def test_age_none_when_no_birth_info(self, mock_tree, mock_client_class):
+        """Test age is None when no birth info is available."""
+        mock_tree.scurry.return_value = pd.DataFrame()
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "id1",
+                "_last_modified": "2023-01-01",
+                "data_description": {},
+                "acquisition": {"acquisition_start_time": "2023-06-01T00:00:00"},
+            }
+        ]
+
+        result = asset_basics(force_update=True)
+
+        self.assertIsNone(result.iloc[0]["age"])
+
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.MetadataDbClient")
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.acorns.TREE")
+    def test_acquisition_type_stored(self, mock_tree, mock_client_class):
+        """Test acquisition_type is stored from acquisition.acquisition_type."""
+        mock_tree.scurry.return_value = pd.DataFrame()
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "id1",
+                "_last_modified": "2023-01-01",
+                "data_description": {},
+                "acquisition": {"acquisition_type": "multiplane-2photon"},
+            }
+        ]
+
+        result = asset_basics(force_update=True)
+
+        self.assertEqual(result.iloc[0]["acquisition_type"], "multiplane-2photon")
+
 
 if __name__ == "__main__":
     unittest.main()
