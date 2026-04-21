@@ -197,7 +197,10 @@ def asset_basics_columns() -> list[Column]:
         Column(name="code_ocean", description="Code Ocean asset ID if available"),
         Column(name="process_date", description="Date of latest processing in YYYY-MM-DD format"),
         Column(name="genotype", description="Genotype information for the subject if available"),
-        Column(name="age", description="Age of the subject in days at time of acquisition, derived from date_of_birth or year_of_birth"),
+        Column(
+            name="age",
+            description="Age of the subject in days at time of acquisition, derived from date_of_birth or year_of_birth",
+        ),
         Column(name="acquisition_type", description="Acquisition type (e.g. multiplane-2photon)"),
         Column(name="location", description="Location of the asset in S3"),
         Column(name="name", description="Asset name"),
