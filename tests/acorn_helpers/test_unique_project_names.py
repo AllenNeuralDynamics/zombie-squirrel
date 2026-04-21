@@ -54,6 +54,23 @@ class TestUniqueProjectNames(unittest.TestCase):
 
     @patch("zombie_squirrel.acorn_helpers.unique_project_names.MetadataDbClient")
     @patch("zombie_squirrel.acorn_helpers.unique_project_names.acorns.TREE")
+    def test_unique_project_names_filters_nan(self, mock_tree, mock_client_class):
+        """Test that NaN project names (missing values) are filtered out."""
+        mock_tree.scurry.return_value = pd.DataFrame()
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+        mock_client_instance.aggregate_docdb_records.return_value = [
+            {"project_name": "proj1"},
+            {"project_name": None},
+            {"project_name": "proj2"},
+        ]
+
+        result = unique_project_names(force_update=True)
+
+        self.assertEqual(result, ["proj1", "proj2"])
+
+    @patch("zombie_squirrel.acorn_helpers.unique_project_names.MetadataDbClient")
+    @patch("zombie_squirrel.acorn_helpers.unique_project_names.acorns.TREE")
     def test_unique_project_names_force_update(self, mock_tree, mock_client_class):
         """Test force_update bypasses cache."""
         cached_df = pd.DataFrame({"project_name": ["old_proj"]})

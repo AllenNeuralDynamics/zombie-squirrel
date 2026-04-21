@@ -52,7 +52,7 @@ def unique_project_names(force_update: bool = False) -> list[str]:
         df = pd.DataFrame(unique_project_names)
         acorns.TREE.hide(acorns.NAMES["upn"], df)
 
-    return df["project_name"].tolist()
+    return df["project_name"].dropna().tolist()
 
 
 def unique_project_names_columns() -> list[Column]:
