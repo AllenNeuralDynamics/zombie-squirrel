@@ -3,6 +3,7 @@
 from zombie_squirrel.acorn_helpers import (  # noqa: F401
     asset_basics,
     custom,
+    procedures,
     qc,
     raw_to_derived,
     source_data,
