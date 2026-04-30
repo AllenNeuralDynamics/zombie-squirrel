@@ -5,8 +5,6 @@ Tests for utility functions.
 
 import unittest
 
-from unittest.mock import MagicMock, patch
-
 import zombie_squirrel.acorns as acorns
 from zombie_squirrel.forest import MemoryTree
 from zombie_squirrel.squirrel import Squirrel
