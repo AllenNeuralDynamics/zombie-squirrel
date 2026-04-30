@@ -13,6 +13,15 @@ from zombie_squirrel.utils import (
 )
 
 
+def _to_float(value) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _serialize_materials(materials: list) -> str:
     """Serialize a list of injection materials to a semicolon-separated string of names."""
     if not materials:
@@ -38,15 +47,41 @@ def _coord_systems_from_procedures(proc_block: dict, surgery: dict) -> dict[str,
 
 
 def _extract_translation_by_axes(coordinates: list, axis_names: list[str]) -> dict:
-    """Map the first Translation transform values to axis-named columns."""
+    """Map the first Translation and Rotation transform values to axis-named columns."""
+    result = {name: None for name in axis_names}
+    result.update({f"{name}_rotation": None for name in axis_names})
     for site in coordinates:
         if not isinstance(site, list):
             continue
         for transform in site:
-            if transform.get("object_type") == "Translation":
+            obj_type = transform.get("object_type")
+            if obj_type == "Translation":
                 vals = transform.get("translation") or []
-                return {axis_names[i]: vals[i] if i < len(vals) else None for i in range(len(axis_names))}
-    return {name: None for name in axis_names}
+                result.update({axis_names[i]: vals[i] if i < len(vals) else None for i in range(len(axis_names))})
+            elif obj_type == "Rotation":
+                vals = transform.get("rotation") or []
+                result.update({f"{axis_names[i]}_rotation": vals[i] if i < len(vals) else None for i in range(len(axis_names))})
+    return result
+
+
+def _extract_surgery_fields(surgery: dict) -> dict:
+    """Extract flat surgery-level metadata fields (excluding coordinate_system and measured_coordinates)."""
+    anaesthesia = surgery.get("anaesthesia") or {}
+    experimenters = surgery.get("experimenters") or []
+    return {
+        "surgery_protocol_id": surgery.get("protocol_id"),
+        "experimenters": "; ".join(str(e) for e in experimenters),
+        "ethics_review_id": surgery.get("ethics_review_id"),
+        "animal_weight_prior": _to_float(surgery.get("animal_weight_prior")),
+        "animal_weight_post": _to_float(surgery.get("animal_weight_post")),
+        "weight_unit": surgery.get("weight_unit"),
+        "anaesthetic_type": anaesthesia.get("anaesthetic_type"),
+        "anaesthesia_duration": anaesthesia.get("duration"),
+        "anaesthesia_duration_unit": anaesthesia.get("duration_unit"),
+        "anaesthesia_level": anaesthesia.get("level"),
+        "workstation_id": surgery.get("workstation_id"),
+        "surgery_notes": surgery.get("notes"),
+    }
 
 
 def _extract_first_dynamics(dynamics: list) -> dict:
@@ -178,6 +213,7 @@ def _fetch_all_procedures() -> tuple[pd.DataFrame, pd.DataFrame]:
                 continue
             surgery_start_date = surgery.get("start_date", "")
             coord_sys_map = _coord_systems_from_procedures(proc_block, surgery)
+            surgery_fields = _extract_surgery_fields(surgery)
             inner_procedures = surgery.get("procedures", []) or []
             for proc_idx, proc in enumerate(inner_procedures):
                 proc_type = proc.get("object_type", "")
@@ -188,10 +224,11 @@ def _fetch_all_procedures() -> tuple[pd.DataFrame, pd.DataFrame]:
                         "subject_id": sid,
                         "surgery_start_date": surgery_start_date,
                         "procedure_type": proc_type,
+                        **surgery_fields,
                     }
                 )
                 if proc_type in ("Brain injection", "Injection"):
-                    inj_rows.append(_extract_injection_row(procedure_key, sid, surgery_start_date, proc, coord_sys_map))
+                    inj_rows.append(_extract_injection_row(procedure_key, sid, surgery_start_date, proc, coord_sys_map, surgery_fields))
 
     proc_df = pd.DataFrame(proc_rows) if proc_rows else pd.DataFrame()
     inj_df = pd.DataFrame(inj_rows) if inj_rows else pd.DataFrame()
@@ -208,6 +245,7 @@ def _extract_injection_row(
     surgery_start_date: str,
     proc: dict,
     coord_sys_map: dict[str, list[str]],
+    surgery_fields: dict,
 ) -> dict:
     """Extract a flat row dict from an Injection or BrainInjection procedure dict."""
     targeted = proc.get("targeted_structure") or {}
@@ -234,6 +272,7 @@ def _extract_injection_row(
         "injection_materials": _serialize_materials(proc.get("injection_materials") or []),
         "protocol_id": proc.get("protocol_id", ""),
     }
+    row.update(surgery_fields)
     row.update(coord_cols)
     row.update(_extract_first_dynamics(proc.get("dynamics") or []))
     return row
