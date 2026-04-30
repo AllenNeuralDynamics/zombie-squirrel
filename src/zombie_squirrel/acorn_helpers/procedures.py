@@ -17,7 +17,7 @@ def _serialize_materials(materials: list) -> str:
     """Serialize a list of injection materials to a semicolon-separated string of names."""
     if not materials:
         return ""
-    return "; ".join(m.get("name", "") for m in materials)
+    return "; ".join(m.get("name") or "" for m in materials)
 
 
 def _axis_names_from_coord_sys(coord_sys: dict) -> list[str]:
@@ -130,17 +130,39 @@ def _fetch_all_procedures() -> tuple[pd.DataFrame, pd.DataFrame]:
         version="v2",
     )
 
-    records = client.retrieve_docdb_records(
-        filter_query={"procedures": {"$exists": True}},
-        projection={"procedures": 1, "subject.subject_id": 1},
+    all_records = client.retrieve_docdb_records(
+        filter_query={},
+        projection={"_id": 1},
         limit=0,
     )
+    all_ids = {r["_id"] for r in all_records}
+
+    # Batch retrieve 50 at a time
+    records = []
+    batch_size = 50
+    for i, batch_start in enumerate(range(0, len(all_ids), batch_size)):
+        batch_ids = list(all_ids)[batch_start : batch_start + batch_size]
+        batch_records = client.retrieve_docdb_records(
+            filter_query={"_id": {"$in": batch_ids}},
+            projection={"procedures": 1, "subject": 1},
+            limit=0,
+        )
+        records.extend(batch_records)
+        logging.info(
+            SquirrelMessage(
+                tree=acorns.TREE.__class__.__name__,
+                acorn=acorns.NAMES["procedures"],
+                message=f"Fetched batch {i + 1}/{(len(all_ids) + batch_size - 1) // batch_size} ({len(records)}/{len(all_ids)} records)",
+            ).to_json()
+        )
+
 
     proc_rows = []
     inj_rows = []
     seen_subject_ids = set()
+    total = len(records)
 
-    for record in records:
+    for i, record in enumerate(records):
         proc_block = record.get("procedures", {}) or {}
         subject_block = record.get("subject", {}) or {}
         sid = subject_block.get("subject_id", "")
@@ -148,6 +170,7 @@ def _fetch_all_procedures() -> tuple[pd.DataFrame, pd.DataFrame]:
         if not sid or sid in seen_subject_ids:
             continue
         seen_subject_ids.add(sid)
+        logging.info(f"[{i + 1}/{total}] Processing subject {sid}")
 
         subject_procedures = proc_block.get("subject_procedures", []) or []
         for surgery_idx, surgery in enumerate(subject_procedures):

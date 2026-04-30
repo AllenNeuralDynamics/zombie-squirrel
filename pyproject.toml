@@ -21,7 +21,7 @@ dependencies = [
     'pyarrow',
     'boto3',
     'pandas>=2.2.0',
-    'aind-data-access-api[docdb]',
+    'aind-data-access-api[docdb]>=1.10.0,<2',
 ]
 
 [dependency-groups]
