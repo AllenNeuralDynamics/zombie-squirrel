@@ -66,8 +66,12 @@ class TestListChannels(unittest.TestCase):
         mock_boto_client.return_value = mock_s3
         mock_s3.list_objects_v2.return_value = {
             "CommonPrefixes": [
-                {"Prefix": "SmartSPIM_123_2026-01-01_00-00-00_stitched_2026-01-02_00-00-00/image_cell_segmentation/Ex_488_Em_525/"},
-                {"Prefix": "SmartSPIM_123_2026-01-01_00-00-00_stitched_2026-01-02_00-00-00/image_cell_segmentation/Ex_561_Em_600/"},
+                {
+                    "Prefix": "SmartSPIM_123_2026-01-01_00-00-00_stitched_2026-01-02_00-00-00/image_cell_segmentation/Ex_488_Em_525/"
+                },
+                {
+                    "Prefix": "SmartSPIM_123_2026-01-01_00-00-00_stitched_2026-01-02_00-00-00/image_cell_segmentation/Ex_561_Em_600/"
+                },
             ]
         }
 
@@ -209,10 +213,15 @@ class TestBuildRows(unittest.TestCase):
         mock_list_channels.return_value = []
         raw_name = "SmartSPIM_123_2026-01-01_00-00-00"
         stitched_name = "SmartSPIM_123_2026-01-01_00-00-00_stitched_2026-01-02_00-00-00"
-        record = {**EXAMPLE_RECORD, "processing": {"data_processes": [
-            {"end_date_time": "2026-01-01T10:00:00"},
-            {"end_date_time": "2026-01-02T12:00:00"},
-        ]}}
+        record = {
+            **EXAMPLE_RECORD,
+            "processing": {
+                "data_processes": [
+                    {"end_date_time": "2026-01-01T10:00:00"},
+                    {"end_date_time": "2026-01-02T12:00:00"},
+                ]
+            },
+        }
 
         rows = _build_rows({raw_name: stitched_name}, {stitched_name: record})
 
@@ -276,7 +285,9 @@ class TestAssetsSmartspim(unittest.TestCase):
             }
         )
         mock_fetch_meta.return_value = {}
-        mock_build_rows.return_value = [{"name": "SmartSPIM_raw_2026-01-01_00-00-00_stitched_2026-01-02_00-00-00", "processed": True}]
+        mock_build_rows.return_value = [
+            {"name": "SmartSPIM_raw_2026-01-01_00-00-00_stitched_2026-01-02_00-00-00", "processed": True}
+        ]
 
         result = assets_smartspim(force_update=True)
 
@@ -301,8 +312,11 @@ class TestAssetsSmartspim(unittest.TestCase):
         )
 
         with patch("zombie_squirrel.acorn_helpers.assets_smartspim._fetch_asset_metadata", return_value={}):
-            with patch("zombie_squirrel.acorn_helpers.assets_smartspim._build_rows", return_value=[{"name": "SmartSPIM_raw_2026-01-01_00-00-00", "processed": False}]) as mock_build:
-                result = assets_smartspim(force_update=True)
+            with patch(
+                "zombie_squirrel.acorn_helpers.assets_smartspim._build_rows",
+                return_value=[{"name": "SmartSPIM_raw_2026-01-01_00-00-00", "processed": False}],
+            ) as mock_build:
+                assets_smartspim(force_update=True)
 
         raw_to_stitched_arg = mock_build.call_args[0][0]
         self.assertIn("SmartSPIM_raw_2026-01-01_00-00-00", raw_to_stitched_arg)

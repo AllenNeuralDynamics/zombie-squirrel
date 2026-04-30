@@ -307,6 +307,29 @@ class TestAssetBasics(unittest.TestCase):
 
         self.assertEqual(result.iloc[0]["acquisition_type"], "multiplane-2photon")
 
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.MetadataDbClient")
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.acorns.TREE")
+    def test_age_none_when_unparseable_date(self, mock_tree, mock_client_class):
+        """Test age is None when date parsing raises an exception."""
+        mock_tree.scurry.return_value = pd.DataFrame()
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "id1",
+                "_last_modified": "2023-01-01",
+                "data_description": {},
+                "acquisition": {
+                    "acquisition_start_time": "not-a-date",
+                    "subject_details": {"date_of_birth": "also-not-a-date"},
+                },
+            }
+        ]
+
+        result = asset_basics(force_update=True)
+
+        self.assertIsNone(result.iloc[0]["age"])
+
 
 if __name__ == "__main__":
     unittest.main()

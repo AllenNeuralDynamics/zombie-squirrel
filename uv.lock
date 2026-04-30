@@ -34,7 +34,7 @@ wheels = [
 
 [[package]]
 name = "aind-data-access-api"
-version = "1.9.2"
+version = "1.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "boto3" },
@@ -42,9 +42,9 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ea/71/b4255d81da567ac3e4db9ea594c8fbb6494cb3fd9f80fb52e28a5216d701/aind_data_access_api-1.9.2.tar.gz", hash = "sha256:8a2afe4268079f950e35cbd5c1880abe1608b11b8e081bee9308b1507d141c6b", size = 71746, upload-time = "2025-11-18T00:02:14.32Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0b/7c/210906ebf642a19cd5eca57f84a32e7b6d24ff97b7b8b7f315a819b2fad9/aind_data_access_api-1.10.0.tar.gz", hash = "sha256:78dfdcdf8052af95b716e897099b9ed2f912fb3c03741ed08bb65a42163df8d4", size = 72394, upload-time = "2026-04-21T23:30:02.986Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fa/3e/3a312f564cfbb2fee2f6a3d24e3325260b96e8bea4bf0abbd15d4b5a1d46/aind_data_access_api-1.9.2-py3-none-any.whl", hash = "sha256:588afebdf1647be8071131ead1f9c2d2761d29468a128caa181746bad204d2a6", size = 18646, upload-time = "2025-11-18T00:02:13.284Z" },
+    { url = "https://files.pythonhosted.org/packages/43/d6/8fd44feb29df9eaa2d65418d41b7e3303cfc65e66eeccc6159882d5ac673/aind_data_access_api-1.10.0-py3-none-any.whl", hash = "sha256:a463917e13674cfd4e88518beaf1b81a6d077aa80a1fc54ee7d682f462e4ac24", size = 18962, upload-time = "2026-04-21T23:30:01.64Z" },
 ]
 
 [package.optional-dependencies]
@@ -1900,7 +1900,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aind-data-access-api", extras = ["docdb"] },
+    { name = "aind-data-access-api", extras = ["docdb"], specifier = ">=1.10.0,<2" },
     { name = "boto3" },
     { name = "duckdb" },
     { name = "pandas", specifier = ">=2.2.0" },

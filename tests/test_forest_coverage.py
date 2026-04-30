@@ -52,5 +52,14 @@ class TestS3TreeGetLocation(unittest.TestCase):
         self.assertNotIn("zs_my_table/", result)
 
 
+class TestMemoryTreeFetchMissingKey(unittest.TestCase):
+    """Tests for MemoryTree.fetch when key is not present."""
+
+    def test_fetch_missing_key_returns_empty_json(self):
+        tree = MemoryTree()
+        result = tree.fetch("nonexistent.json")
+        self.assertEqual(result, "{}")
+
+
 if __name__ == "__main__":
     unittest.main()

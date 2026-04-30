@@ -119,7 +119,9 @@ def _build_rows(raw_to_stitched: dict[str, str | None], metadata: dict[str, dict
             channel = channels[i - 1] if i <= len(channels) else None
             row[f"channel_{i}"] = channel
             row[f"segmentation_link_{i}"] = _segmentation_link(location, channel) if (processed and channel) else None
-            row[f"quantification_link_{i}"] = _quantification_link(location, channel) if (processed and channel) else None
+            row[f"quantification_link_{i}"] = (
+                _quantification_link(location, channel) if (processed and channel) else None
+            )
         rows.append(row)
     return rows
 
@@ -157,9 +159,7 @@ def assets_smartspim(force_update: bool = False) -> pd.DataFrame:
         )
 
         basics = asset_basics()
-        raw_spim = basics[
-            (basics["data_level"] == "raw") & (basics["modalities"].str.contains("SPIM", na=False))
-        ]
+        raw_spim = basics[(basics["data_level"] == "raw") & (basics["modalities"].str.contains("SPIM", na=False))]
         raw_spim_names = list(raw_spim["name"].dropna())
 
         sd = source_data()

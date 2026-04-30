@@ -5,7 +5,10 @@ Tests for utility functions.
 
 import unittest
 
-from zombie_squirrel.utils import get_s3_cache_path, prefix_table_name
+import zombie_squirrel.acorns as acorns
+from zombie_squirrel.forest import MemoryTree
+from zombie_squirrel.squirrel import Squirrel
+from zombie_squirrel.utils import get_s3_cache_path, get_squirrel_info, prefix_table_name
 
 
 class TestPrefixTableName(unittest.TestCase):
@@ -49,6 +52,21 @@ class TestGetS3CachePath(unittest.TestCase):
         """Test with various filenames."""
         result = get_s3_cache_path("zs_my_data.pqt")
         self.assertEqual(result, "data-asset-cache/zs_my_data.pqt")
+
+
+class TestGetSquirrelInfo(unittest.TestCase):
+    """Tests for get_squirrel_info function."""
+
+    def test_get_squirrel_info(self):
+        tree = MemoryTree()
+        squirrel = Squirrel(acorns=[])
+        tree.plant("squirrel.json", squirrel.model_dump_json())
+        acorns.TREE = tree
+
+        result = get_squirrel_info()
+
+        self.assertIsInstance(result, Squirrel)
+        self.assertEqual(result.acorns, [])
 
 
 if __name__ == "__main__":

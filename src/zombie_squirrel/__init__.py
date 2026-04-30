@@ -11,6 +11,7 @@ __version__ = "0.17.1"
 from zombie_squirrel.acorn_helpers.asset_basics import asset_basics  # noqa: F401
 from zombie_squirrel.acorn_helpers.assets_smartspim import assets_smartspim  # noqa: F401
 from zombie_squirrel.acorn_helpers.custom import custom  # noqa: F401
+from zombie_squirrel.acorn_helpers.procedures import brain_injections, procedures  # noqa: F401
 from zombie_squirrel.acorn_helpers.qc import qc, qc_columns  # noqa: F401
 from zombie_squirrel.acorn_helpers.raw_to_derived import raw_to_derived  # noqa: F401
 from zombie_squirrel.acorn_helpers.source_data import source_data  # noqa: F401
