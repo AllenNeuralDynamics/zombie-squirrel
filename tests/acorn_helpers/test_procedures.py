@@ -128,7 +128,19 @@ class TestAxisHelpers(unittest.TestCase):
     def test_extract_translation_by_axes(self):
         coords = [[{"object_type": "Translation", "translation": [1.3, -1.8, 0.0, 4.4]}]]
         result = _extract_translation_by_axes(coords, ["AP", "ML", "SI", "Depth"])
-        self.assertEqual(result, {"AP": 1.3, "ML": -1.8, "SI": 0.0, "Depth": 4.4, "AP_rotation": None, "ML_rotation": None, "SI_rotation": None, "Depth_rotation": None})
+        self.assertEqual(
+            result,
+            {
+                "AP": 1.3,
+                "ML": -1.8,
+                "SI": 0.0,
+                "Depth": 4.4,
+                "AP_rotation": None,
+                "ML_rotation": None,
+                "SI_rotation": None,
+                "Depth_rotation": None,
+            },
+        )
 
     def test_extract_translation_no_translation(self):
         coords = [[{"object_type": "Rotation", "rotation": [0, 0, 1, 45]}]]
@@ -349,7 +361,10 @@ class TestExtractTranslationNonListSite(unittest.TestCase):
     """Tests for _extract_translation_by_axes with non-list site."""
 
     def test_non_list_site_is_skipped(self):
-        coords = [{"object_type": "Translation", "translation": [1, 2]}, [{"object_type": "Translation", "translation": [3, 4]}]]
+        coords = [
+            {"object_type": "Translation", "translation": [1, 2]},
+            [{"object_type": "Translation", "translation": [3, 4]}],
+        ]
         result = _extract_translation_by_axes(coords, ["AP", "ML"])
         self.assertEqual(result["AP"], 3)
         self.assertEqual(result["ML"], 4)

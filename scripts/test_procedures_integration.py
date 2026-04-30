@@ -63,7 +63,9 @@ class TestBrainInjectionsS3(unittest.TestCase):
     """Integration tests for the brain_injections acorn on S3."""
 
     def test_file_exists(self):
-        self.assertTrue(_s3_key_exists(INJECTIONS_KEY), f"No brain_injections file found at s3://{BUCKET}/{INJECTIONS_KEY}")
+        self.assertTrue(
+            _s3_key_exists(INJECTIONS_KEY), f"No brain_injections file found at s3://{BUCKET}/{INJECTIONS_KEY}"
+        )
 
     def test_has_expected_columns(self):
         import os

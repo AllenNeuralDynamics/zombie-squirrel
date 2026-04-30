@@ -60,7 +60,9 @@ def _extract_translation_by_axes(coordinates: list, axis_names: list[str]) -> di
                 result.update({axis_names[i]: vals[i] if i < len(vals) else None for i in range(len(axis_names))})
             elif obj_type == "Rotation":
                 vals = transform.get("rotation") or []
-                result.update({f"{axis_names[i]}_rotation": vals[i] if i < len(vals) else None for i in range(len(axis_names))})
+                result.update(
+                    {f"{axis_names[i]}_rotation": vals[i] if i < len(vals) else None for i in range(len(axis_names))}
+                )
     return result
 
 
@@ -191,7 +193,6 @@ def _fetch_all_procedures() -> tuple[pd.DataFrame, pd.DataFrame]:
             ).to_json()
         )
 
-
     proc_rows = []
     inj_rows = []
     seen_subject_ids = set()
@@ -227,7 +228,11 @@ def _fetch_all_procedures() -> tuple[pd.DataFrame, pd.DataFrame]:
                     }
                 )
                 if proc_type in ("Brain injection", "Injection"):
-                    inj_rows.append(_extract_injection_row(procedure_key, sid, surgery_start_date, proc, coord_sys_map, surgery_fields))
+                    inj_rows.append(
+                        _extract_injection_row(
+                            procedure_key, sid, surgery_start_date, proc, coord_sys_map, surgery_fields
+                        )
+                    )
 
     proc_df = pd.DataFrame(proc_rows) if proc_rows else pd.DataFrame()
     inj_df = pd.DataFrame(inj_rows) if inj_rows else pd.DataFrame()
