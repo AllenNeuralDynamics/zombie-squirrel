@@ -302,7 +302,7 @@ class TestAssetsSmartspim(unittest.TestCase):
 
         with patch("zombie_squirrel.acorn_helpers.assets_smartspim._fetch_asset_metadata", return_value={}):
             with patch("zombie_squirrel.acorn_helpers.assets_smartspim._build_rows", return_value=[{"name": "SmartSPIM_raw_2026-01-01_00-00-00", "processed": False}]) as mock_build:
-                result = assets_smartspim(force_update=True)
+                assets_smartspim(force_update=True)
 
         raw_to_stitched_arg = mock_build.call_args[0][0]
         self.assertIn("SmartSPIM_raw_2026-01-01_00-00-00", raw_to_stitched_arg)

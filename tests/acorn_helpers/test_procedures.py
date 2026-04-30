@@ -125,16 +125,16 @@ class TestAxisHelpers(unittest.TestCase):
     def test_extract_translation_by_axes(self):
         coords = [[{"object_type": "Translation", "translation": [1.3, -1.8, 0.0, 4.4]}]]
         result = _extract_translation_by_axes(coords, ["AP", "ML", "SI", "Depth"])
-        self.assertEqual(result, {"AP": 1.3, "ML": -1.8, "SI": 0.0, "Depth": 4.4})
+        self.assertEqual(result, {"AP": 1.3, "ML": -1.8, "SI": 0.0, "Depth": 4.4, "AP_rotation": None, "ML_rotation": None, "SI_rotation": None, "Depth_rotation": None})
 
     def test_extract_translation_no_translation(self):
         coords = [[{"object_type": "Rotation", "rotation": [0, 0, 1, 45]}]]
         result = _extract_translation_by_axes(coords, ["AP", "ML"])
-        self.assertEqual(result, {"AP": None, "ML": None})
+        self.assertEqual(result, {"AP": None, "ML": None, "AP_rotation": 0, "ML_rotation": 0})
 
     def test_extract_translation_empty_coords(self):
         result = _extract_translation_by_axes([], ["AP", "ML"])
-        self.assertEqual(result, {"AP": None, "ML": None})
+        self.assertEqual(result, {"AP": None, "ML": None, "AP_rotation": None, "ML_rotation": None})
 
     def test_extract_first_dynamics(self):
         d = [{"profile": "Bolus", "volume": 300, "volume_unit": "nanoliter", "duration": None}]
@@ -173,7 +173,7 @@ class TestExtractInjectionRow(unittest.TestCase):
 
     def test_brain_injection_row(self):
         proc = SAMPLE_RECORD["procedures"]["subject_procedures"][0]["procedures"][1]
-        row = _extract_injection_row("813992_0_1", "813992", "2025-09-24", proc, self.coord_sys_map)
+        row = _extract_injection_row("813992_0_1", "813992", "2025-09-24", proc, self.coord_sys_map, {})
         self.assertEqual(row["procedure_key"], "813992_0_1")
         self.assertEqual(row["subject_id"], "813992")
         self.assertEqual(row["surgery_start_date"], "2025-09-24")
@@ -193,7 +193,7 @@ class TestExtractInjectionRow(unittest.TestCase):
 
     def test_missing_targeted_structure(self):
         proc = {"object_type": "Brain injection", "targeted_structure": None, "dynamics": [], "injection_materials": []}
-        row = _extract_injection_row("sub1_0_0", "sub1", "2025-01-01", proc, {})
+        row = _extract_injection_row("sub1_0_0", "sub1", "2025-01-01", proc, {}, {})
         self.assertEqual(row["targeted_structure_name"], "")
         self.assertEqual(row["targeted_structure_acronym"], "")
 
@@ -205,7 +205,7 @@ class TestExtractInjectionRow(unittest.TestCase):
             "dynamics": [],
             "injection_materials": [],
         }
-        row = _extract_injection_row("sub1_0_0", "sub1", "2025-01-01", proc, {})
+        row = _extract_injection_row("sub1_0_0", "sub1", "2025-01-01", proc, {}, {})
         self.assertNotIn("AP", row)
 
 
