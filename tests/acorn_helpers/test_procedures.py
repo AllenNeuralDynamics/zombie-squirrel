@@ -13,8 +13,11 @@ from zombie_squirrel.acorn_helpers.procedures import (
     _extract_injection_row,
     _extract_translation_by_axes,
     _serialize_materials,
+    _to_float,
     brain_injections,
+    brain_injections_columns,
     procedures,
+    procedures_columns,
 )
 from zombie_squirrel.forest import MemoryTree
 
@@ -327,6 +330,75 @@ class TestBrainInjectionsAcorn(unittest.TestCase):
         df = brain_injections(force_update=True)
 
         self.assertTrue(df.empty)
+
+
+class TestToFloat(unittest.TestCase):
+    """Tests for _to_float helper."""
+
+    def test_valid_float(self):
+        self.assertEqual(_to_float(1.5), 1.5)
+
+    def test_invalid_value(self):
+        self.assertIsNone(_to_float("not-a-number"))
+
+    def test_none(self):
+        self.assertIsNone(_to_float(None))
+
+
+class TestExtractTranslationNonListSite(unittest.TestCase):
+    """Tests for _extract_translation_by_axes with non-list site."""
+
+    def test_non_list_site_is_skipped(self):
+        coords = [{"object_type": "Translation", "translation": [1, 2]}, [{"object_type": "Translation", "translation": [3, 4]}]]
+        result = _extract_translation_by_axes(coords, ["AP", "ML"])
+        self.assertEqual(result["AP"], 3)
+        self.assertEqual(result["ML"], 4)
+
+
+class TestNonSurgeryProcedures(unittest.TestCase):
+    """Tests that non-Surgery entries in subject_procedures are skipped."""
+
+    def setUp(self):
+        acorns.TREE = MemoryTree()
+
+    @patch("zombie_squirrel.acorn_helpers.procedures.MetadataDbClient")
+    def test_non_surgery_object_skipped(self, mock_client_class):
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+        record = {
+            "_id": "abc",
+            "subject": {"subject_id": "sub1"},
+            "procedures": {
+                "subject_procedures": [
+                    {"object_type": "NotASurgery"},
+                    {
+                        "object_type": "Surgery",
+                        "start_date": "2025-01-01",
+                        "procedures": [{"object_type": "Headframe"}],
+                    },
+                ]
+            },
+        }
+        mock_client_instance.retrieve_docdb_records.return_value = [record]
+
+        df = procedures(force_update=True)
+
+        self.assertEqual(len(df), 1)
+        self.assertEqual(df.iloc[0]["procedure_type"], "Headframe")
+
+
+class TestColumnFunctions(unittest.TestCase):
+    """Tests for procedures_columns and brain_injections_columns."""
+
+    def test_procedures_columns_returns_list(self):
+        cols = procedures_columns()
+        self.assertIsInstance(cols, list)
+        self.assertTrue(any(c.name == "procedure_key" for c in cols))
+
+    def test_brain_injections_columns_returns_list(self):
+        cols = brain_injections_columns()
+        self.assertIsInstance(cols, list)
+        self.assertTrue(any(c.name == "procedure_key" for c in cols))
 
 
 if __name__ == "__main__":

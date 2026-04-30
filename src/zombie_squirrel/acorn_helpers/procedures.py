@@ -224,7 +224,6 @@ def _fetch_all_procedures() -> tuple[pd.DataFrame, pd.DataFrame]:
                         "subject_id": sid,
                         "surgery_start_date": surgery_start_date,
                         "procedure_type": proc_type,
-                        **surgery_fields,
                     }
                 )
                 if proc_type in ("Brain injection", "Injection"):
@@ -305,4 +304,16 @@ def brain_injections_columns() -> list[Column]:
         Column(name="injection_volume", description="Injection volume"),
         Column(name="injection_volume_unit", description="Injection volume unit (e.g. nanoliter)"),
         Column(name="protocol_id", description="Protocol ID (DOI)"),
+        Column(name="surgery_protocol_id", description="Surgery protocol ID"),
+        Column(name="experimenters", description="Semicolon-separated list of experimenters"),
+        Column(name="ethics_review_id", description="Ethics review ID"),
+        Column(name="animal_weight_prior", description="Animal weight before surgery"),
+        Column(name="animal_weight_post", description="Animal weight after surgery"),
+        Column(name="weight_unit", description="Unit for animal weight measurements"),
+        Column(name="anaesthetic_type", description="Type of anaesthetic used"),
+        Column(name="anaesthesia_duration", description="Duration of anaesthesia"),
+        Column(name="anaesthesia_duration_unit", description="Unit for anaesthesia duration"),
+        Column(name="anaesthesia_level", description="Level of anaesthesia"),
+        Column(name="workstation_id", description="Workstation ID used for surgery"),
+        Column(name="surgery_notes", description="Free-text notes about the surgery"),
     ]
