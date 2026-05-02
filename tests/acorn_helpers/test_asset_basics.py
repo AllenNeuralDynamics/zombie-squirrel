@@ -307,6 +307,111 @@ class TestAssetBasics(unittest.TestCase):
 
         self.assertEqual(result.iloc[0]["acquisition_type"], "multiplane-2photon")
 
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.MetadataDbClient")
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.acorns.TREE")
+    def test_experimenters_stored_as_comma_separated(self, mock_tree, mock_client_class):
+        """Test experimenters are joined as comma-separated string."""
+        mock_tree.scurry.return_value = pd.DataFrame()
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "id1",
+                "_last_modified": "2023-01-01",
+                "data_description": {},
+                "acquisition": {"experimenters": ["huy.nguyen", "jane.doe"]},
+            }
+        ]
+
+        result = asset_basics(force_update=True)
+
+        self.assertEqual(result.iloc[0]["experimenters"], "huy.nguyen, jane.doe")
+
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.MetadataDbClient")
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.acorns.TREE")
+    def test_experimenters_stored_as_comma_separated_dicts(self, mock_tree, mock_client_class):
+        """Test experimenters handles list of person dicts by extracting name."""
+        mock_tree.scurry.return_value = pd.DataFrame()
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "id1",
+                "_last_modified": "2023-01-01",
+                "data_description": {},
+                "acquisition": {
+                    "experimenters": [
+                        {"name": "Jane Doe", "object_type": "Person"},
+                        {"name": "John Smith", "object_type": "Person"},
+                    ]
+                },
+            }
+        ]
+
+        result = asset_basics(force_update=True)
+
+        self.assertEqual(result.iloc[0]["experimenters"], "Jane Doe, John Smith")
+
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.MetadataDbClient")
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.acorns.TREE")
+    def test_experimenters_empty_when_missing(self, mock_tree, mock_client_class):
+        """Test experimenters is empty string when not present."""
+        mock_tree.scurry.return_value = pd.DataFrame()
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "id1",
+                "_last_modified": "2023-01-01",
+                "data_description": {},
+                "acquisition": {},
+            }
+        ]
+
+        result = asset_basics(force_update=True)
+
+        self.assertEqual(result.iloc[0]["experimenters"], "")
+
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.MetadataDbClient")
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.acorns.TREE")
+    def test_instrument_id_stored(self, mock_tree, mock_client_class):
+        """Test instrument_id is stored from acquisition.instrument_id."""
+        mock_tree.scurry.return_value = pd.DataFrame()
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "id1",
+                "_last_modified": "2023-01-01",
+                "data_description": {},
+                "acquisition": {"instrument_id": "4A"},
+            }
+        ]
+
+        result = asset_basics(force_update=True)
+
+        self.assertEqual(result.iloc[0]["instrument_id"], "4A")
+
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.MetadataDbClient")
+    @patch("zombie_squirrel.acorn_helpers.asset_basics.acorns.TREE")
+    def test_instrument_id_none_when_missing(self, mock_tree, mock_client_class):
+        """Test instrument_id is None when not present."""
+        mock_tree.scurry.return_value = pd.DataFrame()
+        mock_client_instance = MagicMock()
+        mock_client_class.return_value = mock_client_instance
+        mock_client_instance.retrieve_docdb_records.return_value = [
+            {
+                "_id": "id1",
+                "_last_modified": "2023-01-01",
+                "data_description": {},
+                "acquisition": {},
+            }
+        ]
+
+        result = asset_basics(force_update=True)
+
+        self.assertIsNone(result.iloc[0]["instrument_id"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -46,6 +46,8 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
         "other_identifiers",
         "location",
         "name",
+        "acquisition.experimenters",
+        "acquisition.instrument_id",
     ]
 
     if df.empty and not force_update:
@@ -75,6 +77,8 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
                 "acquisition_type",
                 "location",
                 "name",
+                "experimenters",
+                "instrument_id",
             ]
         )
         client = MetadataDbClient(
@@ -171,6 +175,11 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
                 "acquisition_type": record.get("acquisition", {}).get("acquisition_type", None),
                 "location": record.get("location", None),
                 "name": record.get("name", None),
+                "experimenters": ", ".join(
+                    e if isinstance(e, str) else e.get("name", "")
+                    for e in (record.get("acquisition", {}).get("experimenters", []) or [])
+                ),
+                "instrument_id": record.get("acquisition", {}).get("instrument_id", None),
             }
             records.append(flat_record)
 
@@ -204,4 +213,6 @@ def asset_basics_columns() -> list[Column]:
         Column(name="acquisition_type", description="Acquisition type (e.g. multiplane-2photon)"),
         Column(name="location", description="Location of the asset in S3"),
         Column(name="name", description="Asset name"),
+        Column(name="experimenters", description="Acquisition experimenters, comma-separated if multiple"),
+        Column(name="instrument_id", description="Instrument ID used for the acquisition"),
     ]
