@@ -12,7 +12,7 @@ from zombie_squirrel.acorn_helpers.source_data import source_data
 from zombie_squirrel.squirrel import Column
 from zombie_squirrel.utils import SquirrelMessage, setup_logging
 
-NEUROGLANCER_BASE = "https://neuroglancer-demo.appspot.com/#!"
+NEUROGLANCER_BASE = "https://allen.neuroglass.io/new#!"
 AIND_OPEN_DATA_BUCKET = "aind-open-data"
 
 
