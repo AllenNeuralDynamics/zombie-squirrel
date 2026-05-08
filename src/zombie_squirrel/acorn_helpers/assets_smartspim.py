@@ -4,8 +4,6 @@ import logging
 
 import boto3
 import pandas as pd
-from botocore import UNSIGNED
-from botocore.config import Config
 from aind_data_access_api.document_db import MetadataDbClient
 
 import zombie_squirrel.acorns as acorns
