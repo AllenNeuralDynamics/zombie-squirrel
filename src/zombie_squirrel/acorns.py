@@ -40,6 +40,7 @@ NAMES = {
     "r2d": "raw_to_derived",
     "qc": "quality_control",
     "smartspim": "assets_smartspim",
+    "upgrade": "metadata_upgrade",
 }
 
 ACORN_REGISTRY: dict[str, Callable[[], Any]] = {}

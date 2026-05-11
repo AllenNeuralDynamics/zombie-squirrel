@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .acorn_helpers.asset_basics import asset_basics_columns
 from .acorn_helpers.assets_smartspim import assets_smartspim_columns
+from .acorn_helpers.metadata_upgrade import metadata_upgrade_columns
 from .acorn_helpers.qc import qc_columns
 from .acorn_helpers.source_data import source_data_columns
 from .acorn_helpers.unique_project_names import unique_project_names_columns
@@ -68,6 +69,14 @@ def publish_squirrel_metadata() -> None:
             type=AcornType.metadata,
             columns=assets_smartspim_columns(),
         ),
+        Acorn(
+            name=NAMES["upgrade"],
+            description="Metadata upgrade status for each asset across versions",
+            location=TREE.get_location(NAMES["upgrade"]),
+            partitioned=False,
+            type=AcornType.metadata,
+            columns=metadata_upgrade_columns(),
+        ),
     ]
     squirrel = Squirrel(acorns=acorn_list)
     TREE.plant("squirrel.json", squirrel.model_dump_json())
@@ -87,6 +96,7 @@ def hide_acorns():
     df_basics = ACORN_REGISTRY[NAMES["basics"]](force_update=True)
 
     ACORN_REGISTRY[NAMES["d2r"]](force_update=True)
+    ACORN_REGISTRY[NAMES["upgrade"]](force_update=True)
 
     subject_ids = df_basics["subject_id"].dropna().unique()
 
