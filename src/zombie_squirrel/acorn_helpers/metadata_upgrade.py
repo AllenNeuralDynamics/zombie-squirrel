@@ -50,20 +50,26 @@ def metadata_upgrade(force_update: bool = False) -> pd.DataFrame:
             logging.warning("Column 'upgrader_version' not found in custom table. Cannot version columns.")
             return pd.DataFrame()
 
-        # The table contains the version for each run. We use the first one as current.
-        current_version = str(raw_upgrade_df["upgrader_version"].iloc[0])
-
         upgrade_data = raw_upgrade_df.copy()
         upgrade_data.rename(columns={"v1_id": "_id"}, inplace=True)
-        upgrade_data[current_version] = upgrade_data["status"]
+
+        unique_versions = [str(v) for v in upgrade_data["upgrader_version"].unique()]
+        for version in unique_versions:
+            mask = upgrade_data["upgrader_version"].astype(str) == version
+            upgrade_data[version] = upgrade_data["status"].where(mask, other=pd.NA)
 
         if not df.empty:
             drop_cols = ["name", "project_name", "data_level", "v2_id", "upgrader_version", "last_modified", "status", "upgrade_datetime"]
             existing_versions = df.drop(columns=[c for c in drop_cols if c in df.columns], errors='ignore')
             df_merged = existing_versions.merge(upgrade_data, on="_id", how="outer", suffixes=('', '_new'))
-            if f"{current_version}_new" in df_merged.columns:
-                df_merged[current_version] = df_merged[f"{current_version}_new"]
-                df_merged.drop(columns=[f"{current_version}_new"], inplace=True)
+            for version in unique_versions:
+                new_col = f"{version}_new"
+                if new_col in df_merged.columns:
+                    if version in df_merged.columns:
+                        df_merged[version] = df_merged[new_col].combine_first(df_merged[version])
+                    else:
+                        df_merged[version] = df_merged[new_col]
+                    df_merged.drop(columns=[new_col], inplace=True)
             df_final = df_merged
         else:
             df_final = upgrade_data

@@ -25,6 +25,9 @@ dependencies = [
 ]
 
 [dependency-groups]
+cache = [
+    'aind-analysis-arch-result-access>=0.7.4',
+]
 dev = [
     'ruff',
     'coverage',

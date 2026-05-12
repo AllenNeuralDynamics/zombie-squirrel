@@ -41,6 +41,7 @@ NAMES = {
     "qc": "quality_control",
     "smartspim": "assets_smartspim",
     "upgrade": "metadata_upgrade",
+    "foraging": "foraging_sessions",
 }
 
 ACORN_REGISTRY: dict[str, Callable[[], Any]] = {}
