@@ -320,7 +320,7 @@ def test_update_all_tables_propagates_exceptions(mock_registry, mock_backend):
 def test_publish_cache_registry_writes_twenty_fragments(mock_backend):
     mock_backend.get_location.return_value = "s3://bucket/path"
     publish_cache_registry()
-    assert mock_backend.put_registry_fragment.call_count == 21
+    assert mock_backend.put_registry_fragment.call_count == 22
 
 
 @patch("biodata_cache.sync.BACKEND")

@@ -35,6 +35,7 @@ from .cache_table_helpers.platform_exaspim import platform_exaspim_columns
 from .cache_table_helpers.platform_fib import platform_fib_columns
 from .cache_table_helpers.platform_fib_traces import platform_fib_traces_columns
 from .cache_table_helpers.platform_mouselight import platform_mouselight_columns
+from .cache_table_helpers.platform_pophys import platform_pophys_columns
 from .cache_table_helpers.platform_qc import PLATFORMS, platform_qc_columns
 from .cache_table_helpers.platform_smartspim import assets_smartspim_columns
 from .cache_table_helpers.qc import qc_columns
@@ -168,6 +169,15 @@ def _entry_builders() -> dict[str, Callable[[], CacheTable]]:
             partition_key="asset_name",
             type=CacheTableType.platform,
             columns=platform_ecephys_units_columns(),
+        ),
+        NAMES["pophys"]: lambda: CacheTable(
+            name=NAMES["pophys"],
+            description="Population physiology (multiplane-ophys) ROI contours and metadata (one row per ROI), partitioned by asset_name",
+            location=BACKEND.get_location("platform_pophys", partitioned=True),
+            partitioned=True,
+            partition_key="asset_name",
+            type=CacheTableType.platform,
+            columns=platform_pophys_columns(),
         ),
         NAMES["df_sessions"]: lambda: CacheTable(
             name=NAMES["df_sessions"],
@@ -413,6 +423,50 @@ def _job_ecephys_units() -> None:
     publish_registry_fragment(NAMES["ecephys_units"])
 
 
+def _raw_name_map(names: list) -> dict:
+    """Return a mapping of derived asset name -> source raw asset name from source_data."""
+    df = TABLE_REGISTRY[NAMES["d2r"]]()
+    if df.empty or "name" not in df.columns or "source_data" not in df.columns:
+        return {}
+    wanted = set(names)
+    subset = df[df["name"].isin(wanted)]
+    return dict(zip(subset["name"], subset["source_data"], strict=False))
+
+
+def _job_pophys() -> None:
+    """Build pophys ROI contours for each processed multiplane-ophys asset sequentially.
+
+    Only the canonical processing-pipeline outputs
+    (``multiplane-ophys_*_processed_*``) carry the segmentation ROI table; other
+    derived pophys assets (analysis products, single-plane, aggregations) have no
+    segmentation NWB, so they are excluded to avoid probing them fruitlessly.
+    """
+    df_basics = _load_basics()
+    location_map = _location_map(df_basics)
+    asset_names = [
+        name
+        for name in _derived_asset_names(df_basics, "pophys")
+        if name.startswith("multiplane-ophys_") and "_processed_" in name
+    ]
+    raw_map = _raw_name_map(asset_names)
+    pophys_fn = TABLE_REGISTRY[NAMES["pophys"]]
+    for asset_name in asset_names:
+        if BACKEND.partition_exists(f"{NAMES['pophys']}/{asset_name}"):
+            continue
+        try:
+            pophys_fn(
+                asset_name=asset_name,
+                location=location_map.get(asset_name),
+                raw_name=raw_map.get(asset_name),
+                force_update=True,
+            )
+        except Exception as exc:
+            # Isolate per-asset failures (e.g. corrupt source NWB) so one bad asset
+            # cannot abort the whole job. Log the asset name for later follow-up.
+            logging.exception(f"pophys failed for asset {asset_name}: {exc}")
+    publish_registry_fragment(NAMES["pophys"])
+
+
 def _job_curriculum() -> None:
     """Build the behavior curriculum table."""
     TABLE_REGISTRY[NAMES["curriculum"]](force_update=True)
@@ -438,6 +492,7 @@ JOBS: dict[str, Callable[[], None]] = {
     "fib_traces": _job_fib_traces,
     "ecephys_spikes": _job_ecephys_spikes,
     "ecephys_units": _job_ecephys_units,
+    "pophys": _job_pophys,
     "curriculum": _job_curriculum,
     "time_to_qc": _job_time_to_qc,
 }
@@ -482,5 +537,5 @@ def update_all_tables(fast: bool = True, slow: bool = True) -> None:
         run_sync_job("fast")
 
     if slow:
-        for job in ("storage_lens", "qc", "smartspim", "exaspim", "df", "fib_traces", "ecephys_spikes", "ecephys_units", "curriculum", "time_to_qc"):
+        for job in ("storage_lens", "qc", "smartspim", "exaspim", "df", "fib_traces", "ecephys_spikes", "ecephys_units", "pophys", "curriculum", "time_to_qc"):
             run_sync_job(job)

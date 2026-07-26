@@ -41,6 +41,7 @@ Run **`asset_basics` first**, then all of the rest in parallel:
 | `fib_traces`      | `platform_fib_traces` | `asset_basics` | Loops over derived `fib` assets; skips assets whose partition already exists. |
 | `ecephys_spikes`  | `platform_ecephys_spikes` | `asset_basics` | Loops over derived `ecephys` assets; skips existing partitions. |
 | `ecephys_units`   | `platform_ecephys_units` | `asset_basics` | Loops over derived `ecephys` assets; skips existing partitions. |
+| `pophys`          | `platform_pophys` | `asset_basics` | Loops over derived `pophys` (multiplane-ophys) assets; traces ROI contours and writes FOV projection PNGs under `pophys_fov/`. Slow but small; skips existing partitions. |
 | `curriculum`      | `behavior_curriculum` | `asset_basics` | |
 | `time_to_qc`      | `time_to_qc` | `asset_basics` | |
 
@@ -90,6 +91,7 @@ asset_basics ─┼── df
               ├── fib_traces
               ├── ecephys_spikes
               ├── ecephys_units
+              ├── pophys
               ├── curriculum
               └── time_to_qc
 ```
@@ -164,6 +166,7 @@ creation, so these are set up manually):
 | `fib_traces`     | _TBD_ | |
 | `ecephys_spikes` | _TBD_ | |
 | `ecephys_units`  | _TBD_ | |
+| `pophys`         | _TBD_ | |
 | `curriculum`     | _TBD_ | |
 | `time_to_qc`     | _TBD_ | |
 

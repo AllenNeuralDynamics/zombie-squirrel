@@ -23,6 +23,7 @@ from biodata_cache.cache_table_helpers.platform_exaspim import platform_exaspim 
 from biodata_cache.cache_table_helpers.platform_fib import platform_fib  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_fib_traces import platform_fib_traces  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_mouselight import platform_mouselight  # noqa: F401
+from biodata_cache.cache_table_helpers.platform_pophys import platform_pophys  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_qc import platform_qc  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_smartspim import assets_smartspim  # noqa: F401
 from biodata_cache.cache_table_helpers.qc import qc, qc_columns  # noqa: F401

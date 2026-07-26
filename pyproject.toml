@@ -31,6 +31,9 @@ sync = [
     'sqlalchemy',
     'psycopg2-binary',
     'zarr<3',
+    'scikit-image',
+    'shapely',
+    'pillow',
 ]
 
 [dependency-groups]

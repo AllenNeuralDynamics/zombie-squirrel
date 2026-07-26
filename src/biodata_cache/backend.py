@@ -25,8 +25,8 @@ HIVE_PARTITION_KEYS = {
     "platform_fib_traces": "asset_name",
     "platform_ecephys_spikes": "asset_name",
     "platform_ecephys_units": "asset_name",
+    "platform_pophys": "asset_name",
 }
-
 # S3 error codes that mean the object genuinely does not exist (a legitimate empty
 # cache) as opposed to a read failure.
 _NOT_FOUND_CODES = {"404", "NoSuchKey", "NotFound"}
@@ -65,6 +65,11 @@ class Backend(ABC):
     @abstractmethod
     def put_json(self, key: str, data: str) -> None:
         """Write a JSON string to the storage root under the given key."""
+        pass  # pragma: no cover
+
+    @abstractmethod
+    def put_bytes(self, key: str, data: bytes, content_type: str) -> None:
+        """Write raw bytes (e.g. a PNG) to the storage root under the given key."""
         pass  # pragma: no cover
 
     @abstractmethod
@@ -318,6 +323,21 @@ class S3Backend(Backend):
         )
         self.register_version()
 
+    def put_bytes(self, key: str, data: bytes, content_type: str) -> None:  # pragma: no cover
+        """Write raw bytes to the versioned folder in S3."""
+        s3_key = f"{_CACHE_ROOT}/{_VERSION_FOLDER}/{key}"
+        self.s3_client.put_object(
+            Bucket=self.bucket,
+            Key=s3_key,
+            Body=data,
+            ContentType=content_type,
+        )
+        logging.info(
+            CacheLogMessage(
+                backend="S3Backend", table=key, message=f"Published bytes to s3://{self.bucket}/{s3_key}"
+            ).to_json()
+        )
+
     def register_version(self) -> None:  # pragma: no cover
         """Add the active version folder to the top-level cache_versions.json index."""
         index_key = f"{_CACHE_ROOT}/cache_versions.json"
@@ -438,6 +458,7 @@ class MemoryBackend(Backend):
         super().__init__()
         self._store: dict[str, pd.DataFrame] = {}
         self._json_store: dict[str, str] = {}
+        self._bytes_store: dict[str, bytes] = {}
 
     def write(self, table_name: str, data: pd.DataFrame) -> None:
         """Store DataFrame in memory."""
@@ -486,6 +507,10 @@ class MemoryBackend(Backend):
         )
         self._json_store[f"{_VERSION_FOLDER}/{key}"] = data
         self.register_version()
+
+    def put_bytes(self, key: str, data: bytes, content_type: str) -> None:
+        """Store raw bytes in the versioned in-memory bytes store."""
+        self._bytes_store[f"{_VERSION_FOLDER}/{key}"] = data
 
     def register_version(self) -> None:
         """Add the active version folder to the in-memory cache_versions.json index."""
