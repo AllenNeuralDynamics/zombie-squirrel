@@ -42,6 +42,7 @@ Run **`asset_basics` first**, then all of the rest in parallel:
 | `ecephys_spikes`  | `platform_ecephys_spikes` | `asset_basics` | Loops over derived `ecephys` assets; skips existing partitions. |
 | `ecephys_units`   | `platform_ecephys_units` | `asset_basics` | Loops over derived `ecephys` assets; skips existing partitions. |
 | `pophys`          | `platform_pophys` | `asset_basics` | Loops over derived `pophys` (multiplane-ophys) assets; traces ROI contours and writes FOV projection PNGs under `pophys_fov/`. Slow but small; skips existing partitions. |
+| `swdb`            | `platform_swdb_sessions`, `platform_swdb_trials`, `platform_swdb_performance`, `platform_swdb_events`, `platform_swdb_eye`, `platform_swdb_running` | — | Builds the curated SWDB workshop sets. The asset list is **hardcoded** in `SWDB_SETS` (`cache_table_helpers/platform_swdb.py`), not queried from `asset_basics`, so this job has no upstream dependency and is reproducible. Source files are merged **HDF5** NWBs (~3.7 GB each) read over ranged HTTP with `h5py`; all six tables for an asset are extracted in one pass over its file. Skips assets whose trials partition already exists, so a re-run is cheap. Effectively a run-once job — re-run it only when the curated set changes. |
 | `curriculum`      | `behavior_curriculum` | `asset_basics` | |
 | `time_to_qc`      | `time_to_qc` | `asset_basics` | |
 
@@ -94,10 +95,14 @@ asset_basics ─┼── df
               ├── pophys
               ├── curriculum
               └── time_to_qc
+
+swdb (independent — no upstream dependency)
 ```
 
 `asset_basics` is the single upstream dependency; every other job depends only on
-it and is independent of the others, so they all run concurrently.
+it and is independent of the others, so they all run concurrently. `swdb` is the
+one exception: its asset list is hardcoded, so it reads nothing from
+`asset_basics` and may run at any time (it is still in `PARALLEL_JOBS`).
 
 ## Registry: how the `cache_registry.json` is written
 

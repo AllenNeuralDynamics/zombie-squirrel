@@ -35,6 +35,7 @@ def _make_registry(basics_df=None, sessions_df=None):
         "metadata_upgrade": MagicMock(),
         "platform_fib": MagicMock(),
         "platform_fib_traces": MagicMock(),
+        "platform_fib_operations": MagicMock(),
         "platform_ecephys_spikes": MagicMock(),
         "platform_ecephys_units": MagicMock(),
         "platform_mouselight": MagicMock(),
@@ -45,6 +46,12 @@ def _make_registry(basics_df=None, sessions_df=None):
         "platform_qc": MagicMock(),
         "time_to_qc": MagicMock(),
         "storage_lens": MagicMock(),
+        "platform_swdb_sessions": MagicMock(),
+        "platform_swdb_trials": MagicMock(),
+        "platform_swdb_performance": MagicMock(),
+        "platform_swdb_events": MagicMock(),
+        "platform_swdb_eye": MagicMock(),
+        "platform_swdb_running": MagicMock(),
     }
     return mocks
 
@@ -248,6 +255,76 @@ def test_fib_traces_job_skips_existing_partitions(mock_registry, mock_backend):
 
 
 @patch("biodata_cache.sync.BACKEND")
+@patch("biodata_cache.sync.build_swdb_sessions")
+@patch("biodata_cache.sync.extract_swdb_asset")
+@patch("biodata_cache.sync.swdb_asset_names")
+def test_swdb_job_extracts_curated_assets(mock_names, mock_extract, mock_build, mock_backend):
+    mock_names.return_value = ["swdb1", "swdb2"]
+    mock_extract.side_effect = lambda name: {"asset_name": name}
+    mock_backend.get_location.return_value = "s3://bucket/path"
+    mock_backend.partition_exists.return_value = False
+
+    run_sync_job("swdb")
+
+    assert [c[0][0] for c in mock_extract.call_args_list] == ["swdb1", "swdb2"]
+    mock_build.assert_called_once_with([{"asset_name": "swdb1"}, {"asset_name": "swdb2"}])
+    # one fragment per SWDB table
+    published = [c[0][0] for c in mock_backend.put_registry_fragment.call_args_list]
+    assert published == [
+        "platform_swdb_sessions",
+        "platform_swdb_trials",
+        "platform_swdb_performance",
+        "platform_swdb_events",
+        "platform_swdb_eye",
+        "platform_swdb_running",
+    ]
+
+
+@patch("biodata_cache.sync.BACKEND")
+@patch("biodata_cache.sync.build_swdb_sessions")
+@patch("biodata_cache.sync.extract_swdb_asset")
+@patch("biodata_cache.sync.swdb_asset_names")
+def test_swdb_job_skips_existing_and_leaves_catalog(mock_names, mock_extract, mock_build, mock_backend):
+    mock_names.return_value = ["swdb1"]
+    mock_backend.get_location.return_value = "s3://bucket/path"
+    mock_backend.partition_exists.return_value = True
+
+    run_sync_job("swdb")
+
+    mock_extract.assert_not_called()
+    # nothing was rebuilt, so the existing sessions catalog must not be rewritten
+    mock_build.assert_not_called()
+    assert mock_backend.put_registry_fragment.call_count == 6
+
+
+@patch("biodata_cache.sync.BACKEND")
+@patch("biodata_cache.sync.build_swdb_sessions")
+@patch("biodata_cache.sync.extract_swdb_asset")
+@patch("biodata_cache.sync.swdb_asset_names")
+def test_swdb_job_isolates_per_asset_failures(mock_names, mock_extract, mock_build, mock_backend):
+    mock_names.return_value = ["bad", "good"]
+    mock_extract.side_effect = [Exception("unreadable nwb"), {"asset_name": "good"}]
+    mock_backend.get_location.return_value = "s3://bucket/path"
+    mock_backend.partition_exists.return_value = False
+
+    run_sync_job("swdb")
+
+    # the bad asset is logged and skipped; the good one still lands in the catalog
+    mock_build.assert_called_once_with([{"asset_name": "good"}])
+
+
+@patch("biodata_cache.sync.BACKEND")
+@patch("biodata_cache.sync.fetch_all_fib_operations")
+def test_fib_operations_job_bulk_fetch(mock_fetch, mock_backend):
+    mock_backend.get_location.return_value = "s3://bucket/path"
+
+    run_sync_job("fib_operations")
+
+    mock_fetch.assert_called_once_with()
+    assert mock_backend.put_registry_fragment.call_args[0][0] == "platform_fib_operations"
+
+
+@patch("biodata_cache.sync.BACKEND")
 @patch("biodata_cache.sync.TABLE_REGISTRY")
 def test_ecephys_jobs_run_over_ecephys_assets(mock_registry, mock_backend):
     df = pd.DataFrame(
@@ -320,7 +397,7 @@ def test_update_all_tables_propagates_exceptions(mock_registry, mock_backend):
 def test_publish_cache_registry_writes_twenty_fragments(mock_backend):
     mock_backend.get_location.return_value = "s3://bucket/path"
     publish_cache_registry()
-    assert mock_backend.put_registry_fragment.call_count == 22
+    assert mock_backend.put_registry_fragment.call_count == 29
 
 
 @patch("biodata_cache.sync.BACKEND")
