@@ -6,7 +6,7 @@ Also exposes get_cache_registry to retrieve the cache_registry.json registry of 
 available cache tables and their metadata.
 """
 
-__version__ = "0.40.0"
+__version__ = "0.40.1"
 
 from biodata_cache.cache_table_helpers.asset_basics import asset_basics  # noqa: F401
 from biodata_cache.cache_table_helpers.behavior_curriculum import behavior_curriculum  # noqa: F401
