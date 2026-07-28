@@ -17,6 +17,7 @@ asset (each Insights query scans the whole log group).
 import json
 import logging
 import time
+import urllib.parse
 
 import boto3
 import pandas as pd
@@ -34,6 +35,25 @@ _DEFAULT_LOOKBACK_DAYS = 400
 _MAX_QUERY_RESULTS = 10000
 _QUERY_POLL_SECONDS = 2.0
 _QUERY_TIMEOUT_SECONDS = 120.0
+_REGION = "us-west-2"
+
+
+def _cloudwatch_url(log_stream: str | None) -> str | None:
+    """Build a CloudWatch console deep link to a log stream, or None.
+
+    Links to the ``/codeocean/pipelines`` log group's stream that emitted the
+    event, so the full surrounding logs (and traceback) can be inspected in the
+    console. The log-group and stream path segments are URL-encoded twice, as the
+    CloudWatch console hash router requires.
+    """
+    if not log_stream:
+        return None
+    group = urllib.parse.quote(urllib.parse.quote(_LOG_GROUP, safe=""), safe="")
+    stream = urllib.parse.quote(urllib.parse.quote(log_stream, safe=""), safe="")
+    return (
+        f"https://{_REGION}.console.aws.amazon.com/cloudwatch/home?region={_REGION}"
+        f"#logsV2:log-groups/log-group/{group}/log-events/{stream}"
+    )
 
 
 def _log(message: str) -> None:
@@ -60,7 +80,7 @@ def _query_string(acquisition_name: str | None = None) -> str:
     """
     event_list = ", ".join(f'"{e}"' for e in _KEEP_EVENT_TYPES)
     lines = [
-        "fields @timestamp, @message",
+        "fields @timestamp, @message, @logStream",
         f'| filter pipeline_name = "{_PIPELINE_NAME}"',
         f"| filter event_type in [{event_list}]",
         '| filter acquisition_name != ""',
@@ -137,6 +157,7 @@ def _parse_row(row: list[dict]) -> dict | None:
         "level": record.get("level"),
         "message": record.get("message"),
         "error_info": record.get("exc_info"),
+        "cloudwatch_url": _cloudwatch_url(fields.get("@logStream")),
     }
 
 
@@ -152,6 +173,7 @@ def _events_dataframe(rows: list[list[dict]]) -> pd.DataFrame:
         "level",
         "message",
         "error_info",
+        "cloudwatch_url",
     ]
     df = pd.DataFrame(records, columns=columns)
     if df.empty:
@@ -295,4 +317,5 @@ def platform_fib_operations_columns() -> list[Column]:
         Column(name="level", description="Log level of the record (e.g. INFO, ERROR)"),
         Column(name="message", description="Human-readable log message"),
         Column(name="error_info", description="Exception traceback for stage_error events; null otherwise"),
+        Column(name="cloudwatch_url", description="Deep link to the CloudWatch console log stream for this event"),
     ]

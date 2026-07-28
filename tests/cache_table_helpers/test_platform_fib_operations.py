@@ -34,6 +34,7 @@ def _row(timestamp, acq, process, event_type, message, level="INFO", exc=None, i
     return [
         {"field": "@timestamp", "value": ingest},
         {"field": "@message", "value": json.dumps(record)},
+        {"field": "@logStream", "value": "nf-stream/default/abc123"},
     ]
 
 
@@ -57,6 +58,8 @@ def test_parse_row_valid():
     assert parsed["process_name"] == "aind-fip-dff"
     assert parsed["event_type"] == "stage_complete"
     assert parsed["error_info"] is None
+    assert parsed["cloudwatch_url"].startswith("https://us-west-2.console.aws.amazon.com/cloudwatch/home")
+    assert "log-events" in parsed["cloudwatch_url"]
 
 
 def test_parse_row_error_keeps_exc_info():
@@ -188,4 +191,4 @@ def test_platform_fib_operations_read_without_asset_raises():
 
 def test_columns_names():
     names = {c.name for c in platform_fib_operations_columns()}
-    assert {"timestamp", "ingest_ts", "process_name", "event_type", "error_info"} <= names
+    assert {"timestamp", "ingest_ts", "process_name", "event_type", "error_info", "cloudwatch_url"} <= names
