@@ -20,7 +20,7 @@ from biodata_cache.utils import (
 def asset_basics(force_update: bool = False) -> pd.DataFrame:
     """Fetch basic asset metadata including modalities, projects, and subject info.
 
-    Returns a DataFrame with columns: _id, _last_modified, modalities,
+    Returns a DataFrame with columns: _id, _last_modified, created, modalities,
     project_name, data_level, subject_id, acquisition_start_time, and
     acquisition_end_time. Uses incremental updates based on _last_modified
     timestamps to avoid re-fetching unchanged records.
@@ -35,6 +35,7 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
     df = registry.BACKEND.read(registry.NAMES["basics"])
 
     FIELDS = [
+        "_created",
         "data_description.modalities",
         "data_description.project_name",
         "data_description.data_level",
@@ -65,6 +66,7 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
             columns=[
                 "_id",
                 "_last_modified",
+                "created",
                 "modalities",
                 "project_name",
                 "data_level",
@@ -167,6 +169,10 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
             flat_record = {
                 "_id": record["_id"],
                 "_last_modified": record.get("_last_modified", None),
+                # DocDB record creation time — the asset's metadata record is
+                # written when the asset finishes uploading, so this is the
+                # closest available proxy for upload time.
+                "created": record.get("_created", None),
                 "modalities": modality_abbreviations,
                 "project_name": record.get("data_description", {}).get("project_name", None),
                 "data_level": record.get("data_description", {}).get("data_level", None),
@@ -238,6 +244,13 @@ def asset_basics_columns() -> list[Column]:
     return [
         Column(name="_id", description="DocDB record ID for the asset"),
         Column(name="_last_modified", description="DocDB last modified timestamp for the asset record"),
+        Column(
+            name="created",
+            description=(
+                "DocDB record creation timestamp (_created), used as the asset's upload time — the metadata "
+                "record is written when upload completes"
+            ),
+        ),
         Column(name="modalities", description="Modalities present in the asset as a list of abbreviations"),
         Column(name="project_name", description="Project name associated with the asset"),
         Column(name="data_level", description="Data level of the asset (e.g. raw, derived)"),

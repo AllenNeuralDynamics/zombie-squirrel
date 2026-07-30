@@ -359,3 +359,50 @@ def test_instrument_id_none_when_missing(mock_backend, mock_client_class):
     ]
     result = asset_basics(force_update=True)
     assert result.iloc[0]["instrument_id"] is None
+
+
+@patch("aind_data_access_api.document_db.MetadataDbClient")
+@patch("biodata_cache.cache_table_helpers.asset_basics.registry.BACKEND")
+def test_asset_basics_created_from_docdb_created(mock_backend, mock_client_class):
+    """The upload-time column mirrors the record's DocDB _created timestamp."""
+    mock_backend.read.return_value = pd.DataFrame()
+    mock_client_instance = MagicMock()
+    mock_client_class.return_value = mock_client_instance
+    mock_client_instance.retrieve_docdb_records.return_value = [
+        {
+            "_id": "id1",
+            "_last_modified": "2023-01-05",
+            "_created": "2023-01-02T08:30:00Z",
+            "data_description": {"modalities": [{"abbreviation": "img"}], "project_name": "proj1", "data_level": "raw"},
+            "subject": {"subject_id": "sub001"},
+            "acquisition": {
+                "acquisition_start_time": "2023-01-01T10:00:00",
+                "acquisition_end_time": "2023-01-01T11:00:00",
+            },
+        }
+    ]
+    result = asset_basics(force_update=True)
+    assert result.iloc[0]["created"] == "2023-01-02T08:30:00Z"
+
+
+@patch("aind_data_access_api.document_db.MetadataDbClient")
+@patch("biodata_cache.cache_table_helpers.asset_basics.registry.BACKEND")
+def test_asset_basics_created_missing_is_none(mock_backend, mock_client_class):
+    """Records without _created still produce a row, with a null upload time."""
+    mock_backend.read.return_value = pd.DataFrame()
+    mock_client_instance = MagicMock()
+    mock_client_class.return_value = mock_client_instance
+    mock_client_instance.retrieve_docdb_records.return_value = [
+        {
+            "_id": "id1",
+            "_last_modified": "2023-01-05",
+            "data_description": {"modalities": [{"abbreviation": "img"}], "project_name": "proj1", "data_level": "raw"},
+            "subject": {"subject_id": "sub001"},
+            "acquisition": {
+                "acquisition_start_time": "2023-01-01T10:00:00",
+                "acquisition_end_time": "2023-01-01T11:00:00",
+            },
+        }
+    ]
+    result = asset_basics(force_update=True)
+    assert result.iloc[0]["created"] is None
