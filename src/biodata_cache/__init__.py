@@ -21,6 +21,7 @@ from biodata_cache.cache_table_helpers.platform_ecephys_spikes import platform_e
 from biodata_cache.cache_table_helpers.platform_ecephys_units import platform_ecephys_units  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_exaspim import platform_exaspim  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_fib import platform_fib  # noqa: F401
+from biodata_cache.cache_table_helpers.platform_df_operations import platform_df_operations  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_fib_operations import platform_fib_operations  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_fib_traces import platform_fib_traces  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_mouselight import platform_mouselight  # noqa: F401
@@ -28,12 +29,8 @@ from biodata_cache.cache_table_helpers.platform_pophys import platform_pophys  #
 from biodata_cache.cache_table_helpers.platform_qc import platform_qc  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_smartspim import assets_smartspim  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_swdb import (  # noqa: F401
-    platform_swdb_events,
-    platform_swdb_eye,
-    platform_swdb_performance,
-    platform_swdb_running,
-    platform_swdb_sessions,
-    platform_swdb_trials,
+    swdb_2025_bci,
+    swdb_2025_v1dd,
 )
 from biodata_cache.cache_table_helpers.qc import qc, qc_columns  # noqa: F401
 from biodata_cache.cache_table_helpers.raw_to_derived import raw_to_derived  # noqa: F401

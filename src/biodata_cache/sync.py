@@ -29,12 +29,12 @@ from .cache_table_helpers.platform_df import (
     platform_dynamic_foraging_sessions_columns,
     platform_dynamic_foraging_trials_columns,
 )
+from .cache_table_helpers.platform_df_operations import platform_df_operations_columns
 from .cache_table_helpers.platform_ecephys_spikes import platform_ecephys_spikes_columns
 from .cache_table_helpers.platform_ecephys_units import platform_ecephys_units_columns
 from .cache_table_helpers.platform_exaspim import platform_exaspim_columns
 from .cache_table_helpers.platform_fib import platform_fib_columns
 from .cache_table_helpers.platform_fib_operations import (
-    fetch_all_fib_operations,
     platform_fib_operations_columns,
 )
 from .cache_table_helpers.platform_fib_traces import platform_fib_traces_columns
@@ -42,18 +42,9 @@ from .cache_table_helpers.platform_mouselight import platform_mouselight_columns
 from .cache_table_helpers.platform_pophys import platform_pophys_columns
 from .cache_table_helpers.platform_qc import PLATFORMS, platform_qc_columns
 from .cache_table_helpers.platform_smartspim import assets_smartspim_columns
-from .cache_table_helpers.platform_swdb import (
-    build_swdb_sessions,
-    extract_swdb_asset,
-    platform_swdb_events_columns,
-    platform_swdb_eye_columns,
-    platform_swdb_performance_columns,
-    platform_swdb_running_columns,
-    platform_swdb_sessions_columns,
-    platform_swdb_trials_columns,
-    swdb_asset_names,
-)
+from .cache_table_helpers.platform_swdb import swdb_2025_bci_columns, swdb_2025_v1dd_columns
 from .cache_table_helpers.qc import qc_columns
+from .cache_table_helpers.shared.cloudwatch_utils import build_all_operations
 from .cache_table_helpers.source_data import source_data_columns
 from .cache_table_helpers.storage_lens import storage_lens_columns
 from .cache_table_helpers.time_to_qc import time_to_qc_columns
@@ -176,6 +167,15 @@ def _entry_builders() -> dict[str, Callable[[], CacheTable]]:
             type=CacheTableType.platform,
             columns=platform_fib_operations_columns(),
         ),
+        NAMES["df_operations"]: lambda: CacheTable(
+            name=NAMES["df_operations"],
+            description="Dynamic foraging pipeline processing events (one row per lifecycle event), partitioned by asset_name",
+            location=BACKEND.get_location("platform_df_operations", partitioned=True),
+            partitioned=True,
+            partition_key="asset_name",
+            type=CacheTableType.platform,
+            columns=platform_df_operations_columns(),
+        ),
         NAMES["ecephys_spikes"]: lambda: CacheTable(
             name=NAMES["ecephys_spikes"],
             description="Sorted ecephys spike times (one row per spike), partitioned by asset_name",
@@ -203,64 +203,21 @@ def _entry_builders() -> dict[str, Callable[[], CacheTable]]:
             type=CacheTableType.platform,
             columns=platform_pophys_columns(),
         ),
-        NAMES["swdb_sessions"]: lambda: CacheTable(
-            name=NAMES["swdb_sessions"],
-            description="SWDB curated-set session catalog (one row per merged-NWB asset)",
-            location=BACKEND.get_location(NAMES["swdb_sessions"]),
+        NAMES["swdb_2025_bci"]: lambda: CacheTable(
+            name=NAMES["swdb_2025_bci"],
+            description="SWDB 2025 BCI single-neuron-stim session metadata (one row per curated derived asset)",
+            location=BACKEND.get_location(NAMES["swdb_2025_bci"]),
             partitioned=False,
             type=CacheTableType.platform,
-            columns=platform_swdb_sessions_columns(),
+            columns=swdb_2025_bci_columns(),
         ),
-        NAMES["swdb_trials"]: lambda: CacheTable(
-            name=NAMES["swdb_trials"],
-            description="SWDB behavior trials from merged NWB files (one row per trial), partitioned by asset_name",
-            location=BACKEND.get_location("platform_swdb_trials", partitioned=True),
-            partitioned=True,
-            partition_key="asset_name",
+        NAMES["swdb_2025_v1dd"]: lambda: CacheTable(
+            name=NAMES["swdb_2025_v1dd"],
+            description="SWDB 2025 V1 Deep Dive metadata (one row per asset)",
+            location=BACKEND.get_location(NAMES["swdb_2025_v1dd"]),
+            partitioned=False,
             type=CacheTableType.platform,
-            columns=platform_swdb_trials_columns(),
-        ),
-        NAMES["swdb_performance"]: lambda: CacheTable(
-            name=NAMES["swdb_performance"],
-            description="SWDB per-block task performance (one row per block), partitioned by asset_name",
-            location=BACKEND.get_location("platform_swdb_performance", partitioned=True),
-            partitioned=True,
-            partition_key="asset_name",
-            type=CacheTableType.platform,
-            columns=platform_swdb_performance_columns(),
-        ),
-        NAMES["swdb_events"]: lambda: CacheTable(
-            name=NAMES["swdb_events"],
-            description=(
-                "SWDB long-format behavioral event stream: licks, rewards, epochs, opto and "
-                "RF-mapping trials (one row per event), partitioned by asset_name"
-            ),
-            location=BACKEND.get_location("platform_swdb_events", partitioned=True),
-            partitioned=True,
-            partition_key="asset_name",
-            type=CacheTableType.event,
-            columns=platform_swdb_events_columns(),
-        ),
-        NAMES["swdb_eye"]: lambda: CacheTable(
-            name=NAMES["swdb_eye"],
-            description=(
-                "SWDB DLC-derived eye/pupil/corneal-reflection ellipse fits (one row per "
-                "eye-camera frame), partitioned by asset_name"
-            ),
-            location=BACKEND.get_location("platform_swdb_eye", partitioned=True),
-            partitioned=True,
-            partition_key="asset_name",
-            type=CacheTableType.platform,
-            columns=platform_swdb_eye_columns(),
-        ),
-        NAMES["swdb_running"]: lambda: CacheTable(
-            name=NAMES["swdb_running"],
-            description="SWDB running speed (one row per sample), partitioned by asset_name",
-            location=BACKEND.get_location("platform_swdb_running", partitioned=True),
-            partitioned=True,
-            partition_key="asset_name",
-            type=CacheTableType.platform,
-            columns=platform_swdb_running_columns(),
+            columns=swdb_2025_v1dd_columns(),
         ),
         NAMES["df_sessions"]: lambda: CacheTable(
             name=NAMES["df_sessions"],
@@ -472,16 +429,20 @@ def _job_fib_traces() -> None:
     publish_registry_fragment(NAMES["fib_traces"])
 
 
-def _job_fib_operations() -> None:
-    """Build the fiber photometry processing-events table from CloudWatch logs.
+def _job_operations() -> None:
+    """Build every ``platform_*_operations`` table from a single CloudWatch pull.
 
-    Reads the ``last_scan`` sidecar and queries only pipeline lifecycle events
-    ingested since the previous run, appending them to each acquisition's partition
-    (the first run does a full lookback scan). Older events stay cached from prior
-    runs, so the hourly window stays small and no full re-scan is needed.
+    One Logs Insights query fetches lifecycle events across all registered
+    operations pipelines and routes them to each table, so the CloudWatch logs are
+    pulled once and reused. The pull is incremental: it reads the shared
+    ``operations`` last-scan sidecar and queries only events ingested since the
+    previous run, appending them to each acquisition's partition (the first run does
+    a full lookback scan). Older events stay cached from prior runs, so each window
+    stays small and no full re-scan is needed.
     """
-    fetch_all_fib_operations()
+    build_all_operations()
     publish_registry_fragment(NAMES["fib_operations"])
+    publish_registry_fragment(NAMES["df_operations"])
 
 
 def _job_ecephys_spikes() -> None:
@@ -562,43 +523,6 @@ def _job_pophys() -> None:
     publish_registry_fragment(NAMES["pophys"])
 
 
-def _job_swdb() -> None:
-    """Build every SWDB curated-set table from the merged NWB files sequentially.
-
-    The asset list is curated (hardcoded in ``platform_swdb.SWDB_SETS``) rather than
-    queried from ``asset_basics``, so this job has no upstream dependency. Each
-    asset's five partitioned tables are extracted in a single pass over its ~3.7 GB
-    HDF5 NWB; assets whose trials partition already exists are skipped, so a re-run
-    is cheap.
-
-    The unpartitioned ``platform_swdb_sessions`` catalog is rebuilt from the summary
-    rows of whichever assets were extracted this run. If every asset was skipped,
-    the existing catalog is left in place.
-    """
-    summaries = []
-    skipped = 0
-    for asset_name in swdb_asset_names():
-        if BACKEND.partition_exists(f"{NAMES['swdb_trials']}/{asset_name}"):
-            skipped += 1
-            continue
-        try:
-            row = extract_swdb_asset(asset_name)
-            if row:
-                summaries.append(row)
-        except Exception as exc:
-            # Isolate per-asset failures (e.g. an unreadable NWB) so one bad asset
-            # cannot abort the whole job. Log the asset name for later follow-up.
-            logging.exception(f"swdb failed for asset {asset_name}: {exc}")
-
-    if summaries:
-        build_swdb_sessions(summaries)
-    else:
-        logging.info(f"swdb: all {skipped} curated assets already cached; sessions catalog left unchanged")
-
-    for key in ("swdb_sessions", "swdb_trials", "swdb_performance", "swdb_events", "swdb_eye", "swdb_running"):
-        publish_registry_fragment(NAMES[key])
-
-
 def _job_curriculum() -> None:
     """Build the behavior curriculum table."""
     TABLE_REGISTRY[NAMES["curriculum"]](force_update=True)
@@ -622,11 +546,10 @@ JOBS: dict[str, Callable[[], None]] = {
     "exaspim": _job_exaspim,
     "df": _job_df,
     "fib_traces": _job_fib_traces,
-    "fib_operations": _job_fib_operations,
+    "operations": _job_operations,
     "ecephys_spikes": _job_ecephys_spikes,
     "ecephys_units": _job_ecephys_units,
     "pophys": _job_pophys,
-    "swdb": _job_swdb,
     "curriculum": _job_curriculum,
     "time_to_qc": _job_time_to_qc,
 }
@@ -678,11 +601,10 @@ def update_all_tables(fast: bool = True, slow: bool = True) -> None:
             "exaspim",
             "df",
             "fib_traces",
-            "fib_operations",
+            "operations",
             "ecephys_spikes",
             "ecephys_units",
             "pophys",
-            "swdb",
             "curriculum",
             "time_to_qc",
         ):

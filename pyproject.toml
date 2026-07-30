@@ -31,11 +31,6 @@ sync = [
     'sqlalchemy',
     'psycopg2-binary',
     'zarr<3',
-    # The SWDB merged NWBs are true HDF5, not .nwb.zarr, and are read over ranged
-    # HTTP rather than downloaded (each is ~3.7 GB).
-    'h5py',
-    'fsspec',
-    'aiohttp',
     'scikit-image',
     'shapely',
     'pillow',
