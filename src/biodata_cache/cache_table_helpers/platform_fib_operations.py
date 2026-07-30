@@ -18,6 +18,7 @@ import json
 import logging
 import time
 import urllib.parse
+from datetime import datetime, timezone
 
 import boto3
 import pandas as pd
@@ -36,6 +37,33 @@ _MAX_QUERY_RESULTS = 10000
 _QUERY_POLL_SECONDS = 2.0
 _QUERY_TIMEOUT_SECONDS = 120.0
 _REGION = "us-west-2"
+_LAST_SCAN_KEY = f"{registry.NAMES['fib_operations']}_last_scan.json"
+
+
+def _read_last_scan() -> datetime | None:
+    """Return the UTC datetime of the last successful scan, or None if never scanned.
+
+    The sidecar records the maximum log-ingestion time seen on the previous run so
+    the next run only queries newly ingested events. A missing or malformed sidecar
+    triggers a full initial scan.
+    """
+    try:
+        raw = registry.BACKEND.get_json(_LAST_SCAN_KEY)
+        data = json.loads(raw)
+        ts = data.get("last_scan")
+    except Exception:
+        return None
+    if not ts:
+        return None
+    parsed = datetime.fromisoformat(ts)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _write_last_scan(dt: datetime) -> None:
+    """Persist the UTC datetime of the most recent scan to the sidecar file."""
+    registry.BACKEND.put_json(_LAST_SCAN_KEY, json.dumps({"last_scan": dt.isoformat()}))
 
 
 def _cloudwatch_url(log_stream: str | None) -> str | None:
@@ -152,6 +180,7 @@ def _parse_row(row: list[dict]) -> dict | None:
         "asset_name": asset_name,
         "timestamp": record.get("timestamp"),
         "ingest_ts": fields.get("@timestamp"),
+        "pipeline_name": record.get("pipeline_name"),
         "process_name": record.get("process_name"),
         "event_type": record.get("event_type"),
         "level": record.get("level"),
@@ -168,6 +197,7 @@ def _events_dataframe(rows: list[list[dict]]) -> pd.DataFrame:
         "asset_name",
         "timestamp",
         "ingest_ts",
+        "pipeline_name",
         "process_name",
         "event_type",
         "level",
@@ -190,12 +220,21 @@ def _window_ms(lookback_days: int) -> tuple[int, int]:
     return start_ms, end_ms
 
 
-def _write_partition(asset_name: str, df: pd.DataFrame) -> None:
-    """Sort one acquisition's events by time and write its partition."""
+def _write_partition(asset_name: str, df: pd.DataFrame, append: bool = False, chunk_idx: int = 0) -> None:
+    """Sort one acquisition's events by time and write its partition.
+
+    On an incremental run (``append=True``) the events are added as a new numbered
+    chunk so previously cached events from earlier windows are preserved; the
+    lookback no longer reaches those older logs. On a full rebuild the partition is
+    overwritten in place.
+    """
     cache_key = f"{registry.NAMES['fib_operations']}/{asset_name}"
-    registry.BACKEND.clear_partition(cache_key)
     ordered = df.drop(columns=["asset_name"]).sort_values("timestamp").reset_index(drop=True)
-    registry.BACKEND.write(cache_key, ordered)
+    if append:
+        registry.BACKEND.write_chunk(cache_key, ordered, chunk_idx)
+    else:
+        registry.BACKEND.clear_partition(cache_key)
+        registry.BACKEND.write(cache_key, ordered)
 
 
 def _fetch_asset_fib_operations(asset_name: str, lookback_days: int = _DEFAULT_LOOKBACK_DAYS) -> pd.DataFrame:
@@ -219,26 +258,51 @@ def _fetch_asset_fib_operations(asset_name: str, lookback_days: int = _DEFAULT_L
 
 
 def fetch_all_fib_operations(lookback_days: int = _DEFAULT_LOOKBACK_DAYS) -> list[str]:
-    """Fetch every acquisition's events in one bulk query and write all partitions.
+    """Fetch pipeline events since the last scan and append/write all partitions.
 
-    Runs a single Logs Insights query (bisected if it hits the row cap) covering
-    the whole lookback window, groups the events by acquisition, and overwrites one
-    partition per acquisition. Returns the list of acquisition names written.
+    The first run (no sidecar) scans the whole ``lookback_days`` window and writes
+    one partition per acquisition. Every subsequent run reads the ``last_scan``
+    sidecar and queries only events ingested after it, appending them as new chunks
+    to the existing partitions (older logs are outside the window and are preserved
+    from prior runs rather than re-fetched). The sidecar is advanced to the newest
+    log-ingestion time observed, so contiguous windows neither miss nor duplicate
+    events. Returns the list of acquisition names written this run.
     """
     setup_logging()
     client = _logs_client()
-    start_ms, end_ms = _window_ms(lookback_days)
-    _log(f"Querying fiber photometry pipeline events over the last {lookback_days} days")
+    end_dt = datetime.now(timezone.utc)
+    end_ms = int(end_dt.timestamp() * 1000)
+    last_scan = _read_last_scan()
+    incremental = last_scan is not None
+    if incremental:
+        start_ms = int(last_scan.timestamp() * 1000)
+        _log(f"Querying fiber photometry pipeline events ingested since {last_scan.isoformat()}")
+    else:
+        start_ms = end_ms - lookback_days * 86_400_000
+        _log(f"Querying fiber photometry pipeline events over the last {lookback_days} days (initial scan)")
+
     rows = _collect_results(client, start_ms, end_ms, _query_string())
     df = _events_dataframe(rows)
-    if df.empty:
-        _log("No fiber photometry processing events found")
-        return []
+    if incremental and not df.empty:
+        df = df[df["ingest_ts"] > last_scan]
+
     written: list[str] = []
-    for asset_name, group in df.groupby("asset_name", sort=False):
-        _write_partition(asset_name, group)
-        written.append(asset_name)
-    _log(f"Cached processing events for {len(written)} acquisitions ({len(df)} events)")
+    if df.empty:
+        _log("No new fiber photometry processing events found")
+    else:
+        chunk_idx = end_ms // 1000
+        for asset_name, group in df.groupby("asset_name", sort=False):
+            _write_partition(asset_name, group, append=incremental, chunk_idx=chunk_idx)
+            written.append(asset_name)
+        _log(f"Cached processing events for {len(written)} acquisitions ({len(df)} events)")
+
+    if not df.empty:
+        new_last_scan = df["ingest_ts"].max().to_pydatetime()
+    elif incremental:
+        new_last_scan = last_scan
+    else:
+        new_last_scan = end_dt
+    _write_last_scan(new_last_scan)
     return written
 
 
@@ -312,6 +376,7 @@ def platform_fib_operations_columns() -> list[Column]:
     return [
         Column(name="timestamp", description="Event time (UTC) from the pipeline log record"),
         Column(name="ingest_ts", description="CloudWatch log ingestion time (UTC), kept separately from event time"),
+        Column(name="pipeline_name", description="Pipeline that emitted the event (e.g. aind-fiber-photometry-pipeline)"),
         Column(name="process_name", description="Pipeline stage that emitted the event (e.g. aind-fip-dff)"),
         Column(name="event_type", description="Lifecycle event: stage_start, stage_complete, or stage_error"),
         Column(name="level", description="Log level of the record (e.g. INFO, ERROR)"),

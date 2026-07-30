@@ -1,5 +1,6 @@
 """Unit tests for platform_fib_operations cache table."""
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -55,6 +56,7 @@ def test_parse_row_valid():
     row = _row("2026-07-27T10:00:00+00:00", "acq1", "aind-fip-dff", "stage_complete", "done")
     parsed = _parse_row(row)
     assert parsed["asset_name"] == "acq1"
+    assert parsed["pipeline_name"] == "aind-fiber-photometry-pipeline"
     assert parsed["process_name"] == "aind-fip-dff"
     assert parsed["event_type"] == "stage_complete"
     assert parsed["error_info"] is None
@@ -191,4 +193,67 @@ def test_platform_fib_operations_read_without_asset_raises():
 
 def test_columns_names():
     names = {c.name for c in platform_fib_operations_columns()}
-    assert {"timestamp", "ingest_ts", "process_name", "event_type", "error_info", "cloudwatch_url"} <= names
+    assert {"timestamp", "ingest_ts", "pipeline_name", "process_name", "event_type", "error_info", "cloudwatch_url"} <= names
+
+
+def test_read_last_scan_missing_returns_none():
+    with patch.object(fib_ops.registry, "BACKEND") as backend:
+        backend.get_json.side_effect = KeyError("missing")
+        assert fib_ops._read_last_scan() is None
+
+
+def test_read_last_scan_roundtrip_is_utc():
+    from datetime import datetime, timezone
+
+    store = {}
+    with patch.object(fib_ops.registry, "BACKEND") as backend:
+        backend.put_json.side_effect = lambda key, data: store.__setitem__(key, data)
+        backend.get_json.side_effect = lambda key: store[key]
+        fib_ops._write_last_scan(datetime(2026, 7, 27, 10, 0, tzinfo=timezone.utc))
+        out = fib_ops._read_last_scan()
+    assert out == datetime(2026, 7, 27, 10, 0, tzinfo=timezone.utc)
+    assert out.tzinfo is not None
+
+
+def test_read_last_scan_naive_treated_as_utc():
+    with patch.object(fib_ops.registry, "BACKEND") as backend:
+        backend.get_json.return_value = '{"last_scan": "2026-07-27T10:00:00"}'
+        out = fib_ops._read_last_scan()
+    assert out.tzinfo is not None
+    assert out.hour == 10
+
+
+def test_fetch_all_incremental_appends_and_filters():
+    last_scan = '{"last_scan": "2026-07-27 10:02:00+00:00"}'
+    rows = [
+        _row("2026-07-27T10:00:00+00:00", "acq1", "aind-fip-dff", "stage_start", "old", ingest="2026-07-27 10:01:00.000"),
+        _row("2026-07-27T10:06:00+00:00", "acq1", "aind-fip-dff", "stage_complete", "new", ingest="2026-07-27 10:05:00.000"),
+    ]
+    with (
+        patch.object(fib_ops, "_logs_client", return_value=MagicMock()),
+        patch.object(fib_ops, "_collect_results", return_value=rows),
+        patch.object(fib_ops.registry, "BACKEND") as backend,
+    ):
+        backend.get_json.return_value = last_scan
+        written = fetch_all_fib_operations()
+
+    assert written == ["acq1"]
+    backend.write.assert_not_called()
+    backend.write_chunk.assert_called_once()
+    appended = backend.write_chunk.call_args[0][1]
+    assert list(appended["message"]) == ["new"]
+
+
+def test_fetch_all_incremental_empty_keeps_last_scan():
+    last_scan = '{"last_scan": "2026-07-27 10:02:00+00:00"}'
+    with (
+        patch.object(fib_ops, "_logs_client", return_value=MagicMock()),
+        patch.object(fib_ops, "_collect_results", return_value=[]),
+        patch.object(fib_ops.registry, "BACKEND") as backend,
+    ):
+        backend.get_json.return_value = last_scan
+        assert fetch_all_fib_operations() == []
+
+    backend.write_chunk.assert_not_called()
+    written_scan = json.loads(backend.put_json.call_args[0][1])["last_scan"]
+    assert written_scan.startswith("2026-07-27T10:02:00")

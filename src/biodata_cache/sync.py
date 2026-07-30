@@ -475,10 +475,10 @@ def _job_fib_traces() -> None:
 def _job_fib_operations() -> None:
     """Build the fiber photometry processing-events table from CloudWatch logs.
 
-    A single Logs Insights query fetches every pipeline lifecycle event across all
-    acquisitions in the lookback window; each acquisition's partition is then
-    overwritten (status changes as the pipeline progresses, so partitions are not
-    skipped when they already exist).
+    Reads the ``last_scan`` sidecar and queries only pipeline lifecycle events
+    ingested since the previous run, appending them to each acquisition's partition
+    (the first run does a full lookback scan). Older events stay cached from prior
+    runs, so the hourly window stays small and no full re-scan is needed.
     """
     fetch_all_fib_operations()
     publish_registry_fragment(NAMES["fib_operations"])
