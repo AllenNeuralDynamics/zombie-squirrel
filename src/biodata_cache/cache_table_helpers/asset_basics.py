@@ -103,9 +103,9 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
         )
         keep_ids = []
         # Drop all _ids where _last_modified matches cache
+        cached_last_modified = dict(zip(df["_id"], df["_last_modified"]))
         for record in record_ids:
-            cached_row = df[df["_id"] == record["_id"]]
-            if cached_row.empty or cached_row["_last_modified"].values[0] != record["_last_modified"]:
+            if cached_last_modified.get(record["_id"]) != record["_last_modified"]:
                 keep_ids.append(record["_id"])
 
         # Now batch by 100 IDs at a time to avoid overloading server, and fetch all the fields

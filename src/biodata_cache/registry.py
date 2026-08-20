@@ -51,6 +51,7 @@ NAMES = {
     "ecephys_spikes": "platform_ecephys_spikes",
     "ecephys_units": "platform_ecephys_units",
     "pophys": "platform_pophys",
+    "video_frame_times": "platform_behavior-videos_frame-times",
     "core": "metadata_core",
     "df_sessions": "platform_dynamic_foraging_sessions",
     "df_trials": "platform_dynamic_foraging_trials",

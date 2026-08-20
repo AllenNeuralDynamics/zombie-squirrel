@@ -53,6 +53,7 @@ from .cache_table_helpers.platform_swdb import (
     platform_swdb_trials_columns,
     swdb_asset_names,
 )
+from .cache_table_helpers.platform_video_frame_times import platform_video_frame_times_columns
 from .cache_table_helpers.qc import qc_columns
 from .cache_table_helpers.source_data import source_data_columns
 from .cache_table_helpers.storage_lens import storage_lens_columns
@@ -261,6 +262,15 @@ def _entry_builders() -> dict[str, Callable[[], CacheTable]]:
             partition_key="asset_name",
             type=CacheTableType.platform,
             columns=platform_swdb_running_columns(),
+        ),
+        NAMES["video_frame_times"]: lambda: CacheTable(
+            name=NAMES["video_frame_times"],
+            description="Behavior-camera per-frame times from the camstim NI-DAQ sync file (one row per camera frame), partitioned by raw asset_name",
+            location=BACKEND.get_location(NAMES["video_frame_times"], partitioned=True),
+            partitioned=True,
+            partition_key="asset_name",
+            type=CacheTableType.platform,
+            columns=platform_video_frame_times_columns(),
         ),
         NAMES["df_sessions"]: lambda: CacheTable(
             name=NAMES["df_sessions"],
@@ -599,6 +609,44 @@ def _job_swdb() -> None:
         publish_registry_fragment(NAMES[key])
 
 
+def _raw_asset_names_with_modality(df_basics, modality_substr: str) -> list:
+    """Return raw asset names whose modalities contain ``modality_substr``."""
+    if "modalities" not in df_basics.columns or "data_level" not in df_basics.columns:
+        return []
+    mask = df_basics["modalities"].apply(
+        lambda x: x is not None and not isinstance(x, float) and any(modality_substr in m.lower() for m in x)
+    )
+    return df_basics[mask & (df_basics["data_level"] == "raw")]["name"].dropna().unique().tolist()
+
+
+def _job_video_frame_times() -> None:
+    """Build behavior-camera frame times for each raw asset that has behavior videos.
+
+    Iterates raw acquisitions carrying the ``behavior-videos`` modality. Assets without
+    a camstim NI-DAQ sync file (Harp rigs: VR foraging, harp Dynamic Foraging) write an
+    empty partition and are effectively skipped; the viewer falls back to a scalar
+    offset for those.
+    """
+    df_basics = _load_basics()
+    location_map = _location_map(df_basics)
+    asset_names = _raw_asset_names_with_modality(df_basics, "behavior-videos")
+    frame_times_fn = TABLE_REGISTRY[NAMES["video_frame_times"]]
+    for asset_name in asset_names:
+        if BACKEND.partition_exists(f"{NAMES['video_frame_times']}/{asset_name}"):
+            continue
+        try:
+            frame_times_fn(
+                asset_name=asset_name,
+                location=location_map.get(asset_name),
+                force_update=True,
+            )
+        except Exception as exc:
+            # Isolate per-asset failures (e.g. a corrupt sync file) so one bad asset
+            # cannot abort the whole job. Log the asset name for later follow-up.
+            logging.exception(f"video_frame_times failed for asset {asset_name}: {exc}")
+    publish_registry_fragment(NAMES["video_frame_times"])
+
+
 def _job_curriculum() -> None:
     """Build the behavior curriculum table."""
     TABLE_REGISTRY[NAMES["curriculum"]](force_update=True)
@@ -627,6 +675,7 @@ JOBS: dict[str, Callable[[], None]] = {
     "ecephys_units": _job_ecephys_units,
     "pophys": _job_pophys,
     "swdb": _job_swdb,
+    "video_frame_times": _job_video_frame_times,
     "curriculum": _job_curriculum,
     "time_to_qc": _job_time_to_qc,
 }
@@ -683,6 +732,7 @@ def update_all_tables(fast: bool = True, slow: bool = True) -> None:
             "ecephys_units",
             "pophys",
             "swdb",
+            "video_frame_times",
             "curriculum",
             "time_to_qc",
         ):

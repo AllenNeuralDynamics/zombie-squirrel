@@ -33,6 +33,7 @@ HIVE_PARTITION_KEYS = {
     "platform_swdb_eye": "asset_name",
     "platform_swdb_running": "asset_name",
     "platform_swdb_dlc": "asset_name",
+    "platform_behavior-videos_frame-times": "asset_name",
 }
 # S3 error codes that mean the object genuinely does not exist (a legitimate empty
 # cache) as opposed to a read failure.

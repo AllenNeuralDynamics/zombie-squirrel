@@ -35,6 +35,7 @@ from biodata_cache.cache_table_helpers.platform_swdb import (  # noqa: F401
     platform_swdb_sessions,
     platform_swdb_trials,
 )
+from biodata_cache.cache_table_helpers.platform_video_frame_times import platform_video_frame_times  # noqa: F401
 from biodata_cache.cache_table_helpers.qc import qc, qc_columns  # noqa: F401
 from biodata_cache.cache_table_helpers.raw_to_derived import raw_to_derived  # noqa: F401
 from biodata_cache.cache_table_helpers.source_data import source_data  # noqa: F401
