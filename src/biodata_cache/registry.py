@@ -48,6 +48,7 @@ NAMES = {
     "fib": "platform_fib",
     "fib_traces": "platform_fib_traces",
     "fib_operations": "platform_fib_operations",
+    "df_operations": "platform_df_operations",
     "ecephys_spikes": "platform_ecephys_spikes",
     "ecephys_units": "platform_ecephys_units",
     "pophys": "platform_pophys",
@@ -61,13 +62,8 @@ NAMES = {
     "time_to_qc": "time_to_qc",
     "mouselight": "platform_mouselight",
     "storage_lens": "storage_lens",
-    "swdb_sessions": "platform_swdb_sessions",
-    "swdb_trials": "platform_swdb_trials",
-    "swdb_performance": "platform_swdb_performance",
-    "swdb_events": "platform_swdb_events",
-    "swdb_eye": "platform_swdb_eye",
-    "swdb_running": "platform_swdb_running",
-    "swdb_dlc": "platform_swdb_dlc",
+    "swdb_2025_bci": "swdb_2025_bci",
+    "swdb_2025_v1dd": "swdb_2025_v1dd",
 }
 
 TABLE_REGISTRY: dict[str, Callable[[], Any]] = {}

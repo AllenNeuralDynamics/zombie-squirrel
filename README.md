@@ -3,8 +3,8 @@
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 ![Code Style](https://img.shields.io/badge/code%20style-black-black)
 [![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079?logo=semantic-release)](https://github.com/semantic-release/semantic-release)
-![Interrogate](https://img.shields.io/badge/interrogate-39.4%25-red)
-![Coverage](https://img.shields.io/badge/coverage-23%25-red)
+![Interrogate](https://img.shields.io/badge/interrogate-39.2%25-red)
+![Coverage](https://img.shields.io/badge/coverage-24%25-red)
 ![Python](https://img.shields.io/badge/python->=3.10,<3.14-blue?logo=python)
 
 `biodata-cache` is a set of one-line functions that handle the entire process of caching and retrieving data (and metadata) from AIND data assets.

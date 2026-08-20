@@ -6,7 +6,7 @@ Also exposes get_cache_registry to retrieve the cache_registry.json registry of 
 available cache tables and their metadata.
 """
 
-__version__ = "0.40.2"
+__version__ = "0.40.4"
 
 from biodata_cache.cache_table_helpers.asset_basics import asset_basics  # noqa: F401
 from biodata_cache.cache_table_helpers.behavior_curriculum import behavior_curriculum  # noqa: F401
@@ -17,6 +17,7 @@ from biodata_cache.cache_table_helpers.platform_df import (  # noqa: F401
     platform_dynamic_foraging_sessions,
     platform_dynamic_foraging_trials,
 )
+from biodata_cache.cache_table_helpers.platform_df_operations import platform_df_operations  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_ecephys_spikes import platform_ecephys_spikes  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_ecephys_units import platform_ecephys_units  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_exaspim import platform_exaspim  # noqa: F401
@@ -28,12 +29,8 @@ from biodata_cache.cache_table_helpers.platform_pophys import platform_pophys  #
 from biodata_cache.cache_table_helpers.platform_qc import platform_qc  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_smartspim import assets_smartspim  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_swdb import (  # noqa: F401
-    platform_swdb_events,
-    platform_swdb_eye,
-    platform_swdb_performance,
-    platform_swdb_running,
-    platform_swdb_sessions,
-    platform_swdb_trials,
+    swdb_2025_bci,
+    swdb_2025_v1dd,
 )
 from biodata_cache.cache_table_helpers.platform_video_frame_times import platform_video_frame_times  # noqa: F401
 from biodata_cache.cache_table_helpers.qc import qc, qc_columns  # noqa: F401

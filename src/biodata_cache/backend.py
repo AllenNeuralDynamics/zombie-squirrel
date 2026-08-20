@@ -24,15 +24,10 @@ HIVE_PARTITION_KEYS = {
     "platform_dynamic_foraging_events": "subject_id",
     "platform_fib_traces": "asset_name",
     "platform_fib_operations": "asset_name",
+    "platform_df_operations": "asset_name",
     "platform_ecephys_spikes": "asset_name",
     "platform_ecephys_units": "asset_name",
     "platform_pophys": "asset_name",
-    "platform_swdb_trials": "asset_name",
-    "platform_swdb_performance": "asset_name",
-    "platform_swdb_events": "asset_name",
-    "platform_swdb_eye": "asset_name",
-    "platform_swdb_running": "asset_name",
-    "platform_swdb_dlc": "asset_name",
     "platform_behavior-videos_frame-times": "asset_name",
 }
 # S3 error codes that mean the object genuinely does not exist (a legitimate empty
