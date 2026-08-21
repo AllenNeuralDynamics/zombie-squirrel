@@ -435,7 +435,12 @@ def _job_fib_traces() -> None:
     for asset_name in _derived_asset_names(df_basics, "fib"):
         if BACKEND.partition_exists(f"{NAMES['fib_traces']}/{asset_name}"):
             continue
-        fib_traces_fn(asset_name=asset_name, location=location_map.get(asset_name), force_update=True)
+        try:
+            fib_traces_fn(asset_name=asset_name, location=location_map.get(asset_name), force_update=True)
+        except Exception as exc:
+            # Isolate per-asset failures (e.g. missing Zarr or malformed metadata)
+            # so one unsupported derived asset cannot abort the whole job.
+            logging.exception(f"fib_traces failed for asset {asset_name}: {exc}")
     publish_registry_fragment(NAMES["fib_traces"])
 
 
@@ -500,30 +505,51 @@ def _raw_name_map(names: list) -> dict:
 
 
 def _job_pophys() -> None:
-    """Build pophys ROI contours for each processed multiplane-ophys asset sequentially.
+    """Build pophys ROI contours for every derived pophys asset sequentially.
 
-    Only the canonical processing-pipeline outputs
-    (``multiplane-ophys_*_processed_*``) carry the segmentation ROI table; other
-    derived pophys assets (analysis products, single-plane, aggregations) have no
-    segmentation NWB, so they are excluded to avoid probing them fruitlessly.
+    Asset names are not a reliable indication of whether an asset carries a
+    processable NWB. The table helper probes the asset contents and returns an
+    empty result for unsupported assets. If a derived child has no processable
+    NWB of its own, its single source asset is tried as a compatibility fallback
+    and the resulting partition is still keyed by the child name used by the
+    viewer.
     """
     df_basics = _load_basics()
     location_map = _location_map(df_basics)
-    asset_names = [
-        name
-        for name in _derived_asset_names(df_basics, "pophys")
-        if name.startswith("multiplane-ophys_") and "_processed_" in name
-    ]
+    asset_names = _derived_asset_names(df_basics, "pophys")
     raw_map = _raw_name_map(asset_names)
     pophys_fn = TABLE_REGISTRY[NAMES["pophys"]]
     for asset_name in asset_names:
-        if BACKEND.partition_exists(f"{NAMES['pophys']}/{asset_name}"):
+        cache_key = f"{NAMES['pophys']}/{asset_name}"
+        if BACKEND.partition_exists(cache_key):
             continue
         try:
             pophys_fn(
                 asset_name=asset_name,
                 location=location_map.get(asset_name),
                 raw_name=raw_map.get(asset_name),
+                force_update=True,
+            )
+            if BACKEND.partition_exists(cache_key):
+                continue
+
+            source_name = raw_map.get(asset_name)
+            source_location = location_map.get(source_name)
+            if not source_name or not source_location or source_name == asset_name:
+                continue
+
+            # Some legacy derived children are HDF5 assets while their source is
+            # the processable NWB-Zarr asset. Keep the partition keyed by the
+            # child name because raw-to-derived resolution returns that name.
+            logging.info(
+                "pophys asset %s has no cache partition; retrying from source %s",
+                asset_name,
+                source_name,
+            )
+            pophys_fn(
+                asset_name=asset_name,
+                location=source_location,
+                raw_name=source_name,
                 force_update=True,
             )
         except Exception as exc:

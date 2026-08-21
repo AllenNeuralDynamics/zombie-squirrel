@@ -35,6 +35,7 @@ def _make_registry(basics_df=None, sessions_df=None):
         "metadata_upgrade": MagicMock(),
         "platform_fib": MagicMock(),
         "platform_fib_traces": MagicMock(),
+        "platform_pophys": MagicMock(),
         "platform_fib_operations": MagicMock(),
         "platform_df_operations": MagicMock(),
         "platform_ecephys_spikes": MagicMock(),
@@ -250,6 +251,29 @@ def test_fib_traces_job_skips_existing_partitions(mock_registry, mock_backend):
 
 
 @patch("biodata_cache.sync.BACKEND")
+@patch("biodata_cache.sync.TABLE_REGISTRY")
+def test_fib_traces_job_isolates_asset_failures(mock_registry, mock_backend):
+    df = pd.DataFrame(
+        {
+            "name": ["asset1", "asset2"],
+            "location": ["s3://bucket/asset1", "s3://bucket/asset2"],
+            "modalities": [["fib"], ["fib"]],
+            "data_level": ["derived", "derived"],
+        }
+    )
+    reg = _make_registry(basics_df=df)
+    reg["platform_fib_traces"].side_effect = [RuntimeError("unsupported"), None]
+    mock_registry.__getitem__.side_effect = reg.__getitem__
+    mock_backend.get_location.return_value = "s3://bucket/path"
+    mock_backend.partition_exists.return_value = False
+
+    run_sync_job("fib_traces")
+
+    assert reg["platform_fib_traces"].call_count == 2
+    assert mock_backend.put_registry_fragment.call_args[0][0] == "platform_fib_traces"
+
+
+@patch("biodata_cache.sync.BACKEND")
 @patch("biodata_cache.sync.build_all_operations")
 def test_operations_job_single_pull(mock_build, mock_backend):
     mock_backend.get_location.return_value = "s3://bucket/path"
@@ -285,6 +309,73 @@ def test_ecephys_jobs_run_over_ecephys_assets(mock_registry, mock_backend):
     )
     reg["platform_ecephys_units"].assert_called_once_with(
         asset_name="ec1", location="s3://bucket/ec1", force_update=True
+    )
+
+
+def _pophys_basics():
+    return pd.DataFrame(
+        {
+            "name": ["multiplane-ophys_asset_processed_1", "legacy_filtered_asset", "other"],
+            "location": ["s3://bucket/processed", "s3://bucket/filtered", "s3://bucket/other"],
+            "modalities": [["pophys"], ["pophys"], ["behavior"]],
+            "data_level": ["derived", "derived", "derived"],
+        }
+    )
+
+
+@patch("biodata_cache.sync.BACKEND")
+@patch("biodata_cache.sync.TABLE_REGISTRY")
+def test_pophys_job_processes_all_derived_pophys_names(mock_registry, mock_backend):
+    reg = _make_registry(basics_df=_pophys_basics())
+    mock_registry.__getitem__.side_effect = reg.__getitem__
+    mock_backend.get_location.return_value = "s3://bucket/path"
+    mock_backend.partition_exists.return_value = False
+
+    run_sync_job("pophys")
+
+    assert [c.kwargs["asset_name"] for c in reg["platform_pophys"].call_args_list] == [
+        "multiplane-ophys_asset_processed_1",
+        "legacy_filtered_asset",
+    ]
+
+
+@patch("biodata_cache.sync.BACKEND")
+@patch("biodata_cache.sync.TABLE_REGISTRY")
+def test_pophys_job_retries_child_from_processable_source(mock_registry, mock_backend):
+    basics = pd.DataFrame(
+        {
+            "name": ["legacy_filtered_asset", "canonical_nwb_asset"],
+            "location": ["s3://bucket/filtered", "s3://bucket/nwb"],
+            "modalities": [["pophys"], ["pophys"]],
+            "data_level": ["derived", "derived"],
+        }
+    )
+    reg = _make_registry(basics_df=basics)
+    reg["source_data"].return_value = pd.DataFrame(
+        {"name": ["legacy_filtered_asset"], "source_data": ["canonical_nwb_asset"]}
+    )
+    reg["platform_pophys"].side_effect = [None, None]
+    mock_registry.__getitem__.side_effect = reg.__getitem__
+    mock_backend.get_location.return_value = "s3://bucket/path"
+    mock_backend.partition_exists.side_effect = [False, False, True]
+
+    run_sync_job("pophys")
+
+    reg["platform_pophys"].assert_has_calls(
+        [
+            call(
+                asset_name="legacy_filtered_asset",
+                location="s3://bucket/filtered",
+                raw_name="canonical_nwb_asset",
+                force_update=True,
+            ),
+            call(
+                asset_name="legacy_filtered_asset",
+                location="s3://bucket/nwb",
+                raw_name="canonical_nwb_asset",
+                force_update=True,
+            ),
+        ]
     )
 
 
