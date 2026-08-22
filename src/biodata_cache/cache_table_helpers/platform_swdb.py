@@ -21,6 +21,7 @@ from datetime import datetime
 import pandas as pd
 
 import biodata_cache.registry as registry
+from biodata_cache.cache_table_helpers.swdb_public_assets import SWDB_2026_DERIVED_ASSETS_BY_COLLECTION
 from biodata_cache.models import Column
 from biodata_cache.utils import CacheLogMessage, setup_logging
 
@@ -316,3 +317,155 @@ def swdb_2025_v1dd_columns() -> list[Column]:
         Column(name="column", description="V1DD column index"),
         Column(name="volume", description="V1DD volume index"),
     ]
+
+
+# ---------------------------------------------------------------------------
+# SWDB 2026 public Code Ocean collection membership
+# ---------------------------------------------------------------------------
+
+# This is the public SWDB 2026 collection, not a DocDB project query.  These
+# rows are deliberately kept as cache inputs so the dashboard reflects the
+# public collection even when a data asset has no ordinary metadata-index row.
+SWDB_2026_COLLECTION_ID = "23ffb03b-1f54-4369-95b2-a8cea1a9ab33"
+SWDB_2026_COLLECTION_URL = (
+    f"https://codeocean.allenneuraldynamics.org/collections/{SWDB_2026_COLLECTION_ID}"
+)
+
+SWDB_2026_PUBLIC_COLLECTIONS = {
+    "swdb_2026_bci": [
+        {"name": "brain-computer-interface-v2", "data_asset_id": "4bf7c961-8bf8-42a9-8221-c0185e41d2c5", "prefix": "brain-computer-interface-v2"},
+    ],
+    "swdb_2026_v1dd": [
+        {"name": "409828_V1DD_Filtered", "data_asset_id": "2e02e089-3c5d-4de6-aa79-6d4723ebb663", "prefix": "409828_V1DD_Filtered"},
+        {"name": "427836_V1DD_Filtered", "data_asset_id": "bc489ad7-96d0-4292-a0f1-3d1ba8bac057", "prefix": "427836_V1DD_Filtered"},
+        {"name": "438833_V1DD_Filtered", "data_asset_id": "476412fd-5312-4d5e-ad29-64025b0bc247", "prefix": "438833_V1DD_Filtered"},
+        {"name": "416296_V1DD_Filtered", "data_asset_id": "8ece62d1-3228-4d4d-a842-0df83577f819", "prefix": "416296_V1DD_Filtered"},
+    ],
+    "swdb_2026_visual_learning": [
+        {"name": "Visual-Learning-SWDB", "data_asset_id": "6efb73c3-ebb9-432d-a225-203759356027", "prefix": "Visual-Learning-SWDB"},
+    ],
+    "swdb_2026_visual_coding_neuropixels": [
+        {"name": "visual_coding_neuropixels", "data_asset_id": "caa3ab37-9fda-460d-8cce-0a43bff6cd7b", "prefix": "visual_coding_neuropixels"},
+    ],
+    "swdb_2026_visual_coding_ophys": [
+        {"name": "visual_coding_ophys", "data_asset_id": "17494011-7e38-48ee-931b-6afa364131f3", "prefix": "visual_coding_ophys"},
+    ],
+    "swdb_2026_dynamic_routing": [
+        {"name": "swdb_dynamicrouting_datacube", "data_asset_id": "a0a476ca-a855-4c18-a363-c2dcba4d8478", "prefix": "swdb_dynamicrouting_datacube"},
+    ],
+    "swdb_2026_neuropixels_opto": [
+        {"name": "Neuropixels_Opto_ecephys_nwb_combined", "data_asset_id": "7469cd5a-046d-4c94-8234-8a6a1c83b73d", "prefix": "Neuropixels_Opto_ecephys_nwb_combined"},
+    ],
+}
+
+SWDB_2026_COLUMN_ORDER = [
+    "collection_id",
+    "collection_url",
+    "data_asset_id",
+    "collection_asset_name",
+    "name",
+]
+
+
+def _build_swdb_2026_public_table(table_name: str, force_update: bool = False) -> pd.DataFrame:
+    """Build one table from the assets inside the public Code Ocean collections."""
+    df = registry.BACKEND.read(registry.NAMES[table_name])
+    if df.empty or force_update:
+        derived_assets = {
+            collection["name"]: SWDB_2026_DERIVED_ASSETS_BY_COLLECTION.get(collection["name"], [])
+            for collection in SWDB_2026_PUBLIC_COLLECTIONS[table_name]
+        }
+        rows = [
+            {
+                "collection_id": SWDB_2026_COLLECTION_ID,
+                "collection_url": SWDB_2026_COLLECTION_URL,
+                "data_asset_id": collection["data_asset_id"],
+                "collection_asset_name": collection["name"],
+                "name": name,
+            }
+            for collection in SWDB_2026_PUBLIC_COLLECTIONS[table_name]
+            for name in derived_assets[collection["name"]]
+        ]
+        if not rows:
+            raise RuntimeError(f"No derived assets found in public SWDB collection table {table_name}")
+        df = pd.DataFrame(rows, columns=SWDB_2026_COLUMN_ORDER)
+        registry.BACKEND.write(registry.NAMES[table_name], df)
+    return df
+
+
+def _swdb_2026_columns() -> list[Column]:
+    return [
+        Column(name="collection_id", description="Public Code Ocean collection ID"),
+        Column(name="collection_url", description="Public Code Ocean collection URL"),
+        Column(name="data_asset_id", description="Code Ocean data asset ID containing the derived assets"),
+        Column(name="collection_asset_name", description="Public Code Ocean data asset name containing the derived assets"),
+        Column(name="name", description="Derived asset name inside the public data asset"),
+    ]
+
+
+def swdb_2026_bci(force_update: bool = False) -> pd.DataFrame:
+    return _build_swdb_2026_public_table("swdb_2026_bci", force_update)
+
+
+def swdb_2026_v1dd(force_update: bool = False) -> pd.DataFrame:
+    return _build_swdb_2026_public_table("swdb_2026_v1dd", force_update)
+
+
+def swdb_2026_visual_learning(force_update: bool = False) -> pd.DataFrame:
+    return _build_swdb_2026_public_table("swdb_2026_visual_learning", force_update)
+
+
+def swdb_2026_visual_coding_neuropixels(force_update: bool = False) -> pd.DataFrame:
+    return _build_swdb_2026_public_table("swdb_2026_visual_coding_neuropixels", force_update)
+
+
+def swdb_2026_visual_coding_ophys(force_update: bool = False) -> pd.DataFrame:
+    return _build_swdb_2026_public_table("swdb_2026_visual_coding_ophys", force_update)
+
+
+def swdb_2026_dynamic_routing(force_update: bool = False) -> pd.DataFrame:
+    return _build_swdb_2026_public_table("swdb_2026_dynamic_routing", force_update)
+
+
+def swdb_2026_neuropixels_opto(force_update: bool = False) -> pd.DataFrame:
+    return _build_swdb_2026_public_table("swdb_2026_neuropixels_opto", force_update)
+
+
+for _swdb_2026_name, _swdb_2026_builder in {
+    "swdb_2026_bci": swdb_2026_bci,
+    "swdb_2026_v1dd": swdb_2026_v1dd,
+    "swdb_2026_visual_learning": swdb_2026_visual_learning,
+    "swdb_2026_visual_coding_neuropixels": swdb_2026_visual_coding_neuropixels,
+    "swdb_2026_visual_coding_ophys": swdb_2026_visual_coding_ophys,
+    "swdb_2026_dynamic_routing": swdb_2026_dynamic_routing,
+    "swdb_2026_neuropixels_opto": swdb_2026_neuropixels_opto,
+}.items():
+    registry.register_table(registry.NAMES[_swdb_2026_name])(_swdb_2026_builder)
+
+
+def swdb_2026_bci_columns() -> list[Column]:
+    return _swdb_2026_columns()
+
+
+def swdb_2026_v1dd_columns() -> list[Column]:
+    return _swdb_2026_columns()
+
+
+def swdb_2026_visual_learning_columns() -> list[Column]:
+    return _swdb_2026_columns()
+
+
+def swdb_2026_visual_coding_neuropixels_columns() -> list[Column]:
+    return _swdb_2026_columns()
+
+
+def swdb_2026_visual_coding_ophys_columns() -> list[Column]:
+    return _swdb_2026_columns()
+
+
+def swdb_2026_dynamic_routing_columns() -> list[Column]:
+    return _swdb_2026_columns()
+
+
+def swdb_2026_neuropixels_opto_columns() -> list[Column]:
+    return _swdb_2026_columns()

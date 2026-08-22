@@ -30,8 +30,13 @@ from biodata_cache.utils import CacheLogMessage, setup_logging
 _PROCESSING_GROUP = "processing"
 _OPTOPHYS_GROUP = "general/optophysiology"
 _ROI_TABLE = "image_segmentation/roi_table"
+_LEGACY_SINGLE_PLANE = "ophys"
+_LEGACY_SINGLE_ROI = "processing/ophys/ImageSegmentation/PlaneSegmentation"
+_LEGACY_SINGLE_IMAGES = "processing/ophys/SummaryImages"
+_LEGACY_SINGLE_OPTOPHYS = "general/optophysiology/ImagingPlane"
 _S3_URI_RE = re.compile(r"^s3://([^/]+)/(.+)$")
 _LOCATION_RE = re.compile(r"Structure:\s*(?P<structure>\S+).*?Depth:\s*(?P<depth>[\d.]+)", re.IGNORECASE)
+_DEPTH_ONLY_RE = re.compile(r"(?:Depth\s*:\s*)?(?P<depth>[\d.]+)\s*(?:um|microns?)", re.IGNORECASE)
 _SIMPLIFY_TOLERANCE = 0.75
 _MAX_WORKERS = 32
 
@@ -81,6 +86,19 @@ def _plane_names(metadata: dict) -> list[str]:
     return sorted(planes)
 
 
+def _legacy_plane_names(metadata: dict) -> list[str]:
+    """Return legacy imaging-plane names with sparse ROI tables."""
+    planes = []
+    suffix = f"/{_ROI_TABLE}/pixel_mask/.zarray"
+    prefix = f"{_PROCESSING_GROUP}/"
+    for meta_key in metadata:
+        if meta_key.startswith(prefix) and meta_key.endswith(suffix):
+            planes.append(meta_key[len(prefix) : -len(suffix)])
+    if f"{_LEGACY_SINGLE_ROI}/pixel_mask/.zarray" in metadata:
+        planes.append(_LEGACY_SINGLE_PLANE)
+    return sorted(planes)
+
+
 def _plane_array_prefixes(plane: str) -> list[str]:
     """Return the NWB-relative array group prefixes needed for one plane."""
     roi = f"{_PROCESSING_GROUP}/{plane}/{_ROI_TABLE}"
@@ -95,7 +113,7 @@ def _plane_array_prefixes(plane: str) -> list[str]:
     ]
 
 
-def _download_zarr_store(client, bucket: str, nwb_prefix: str, planes: list[str], zmetadata: bytes) -> dict:
+def _download_array_store(client, bucket: str, nwb_prefix: str, array_prefixes: list[str], zmetadata: bytes) -> dict:
     """Concurrently download the consolidated metadata and every requested plane array.
 
     Only the ``.zmetadata`` and the chunks under the ROI-table / projection arrays of
@@ -104,11 +122,10 @@ def _download_zarr_store(client, bucket: str, nwb_prefix: str, planes: list[str]
     """
     keys = []
     paginator = client.get_paginator("list_objects_v2")
-    for plane in planes:
-        for array_prefix in _plane_array_prefixes(plane):
-            for page in paginator.paginate(Bucket=bucket, Prefix=f"{nwb_prefix}/{array_prefix}/"):
-                for obj in page.get("Contents", []):
-                    keys.append(obj["Key"])
+    for array_prefix in dict.fromkeys(array_prefixes):
+        for page in paginator.paginate(Bucket=bucket, Prefix=f"{nwb_prefix}/{array_prefix}/"):
+            for obj in page.get("Contents", []):
+                keys.append(obj["Key"])
 
     def _fetch(s3_key: str) -> tuple[str, bytes]:
         """Download one object and return its NWB-relative key with bytes."""
@@ -122,15 +139,54 @@ def _download_zarr_store(client, bucket: str, nwb_prefix: str, planes: list[str]
     return store
 
 
-def _open_nwb_zarr(location: str):
-    """Open the pophys NWB Zarr group for an asset, or None if no NWB file is found.
+def _download_zarr_store(client, bucket: str, nwb_prefix: str, planes: list[str], zmetadata: bytes) -> dict:
+    """Download the arrays used by the modern dense-mask pophys NWB layout."""
+    prefixes = [prefix for plane in planes for prefix in _plane_array_prefixes(plane)]
+    return _download_array_store(client, bucket, nwb_prefix, prefixes, zmetadata)
 
-    Reads only the consolidated metadata and the ROI/projection chunks via boto3
-    (concurrently), avoiding any full-file download. Returns the consolidated zarr
-    root group.
-    """
-    import zarr
 
+def _download_legacy_zarr_store(
+    client, bucket: str, nwb_prefix: str, planes: list[str], metadata: dict, zmetadata: bytes
+) -> dict:
+    """Download arrays used by the legacy sparse pixel-mask pophys NWB layout."""
+    prefixes = []
+    for plane in planes:
+        if plane == _LEGACY_SINGLE_PLANE:
+            array_prefixes = [
+                f"{_LEGACY_SINGLE_ROI}/{name}"
+                for name in ("id", "is_soma", "pixel_mask", "pixel_mask_index")
+            ]
+            array_prefixes.extend(
+                [f"{_LEGACY_SINGLE_IMAGES}/maximum_intensity_projection"]
+                + [
+                    f"{_LEGACY_SINGLE_OPTOPHYS}/{name}"
+                    for name in ("location", "imaging_rate", "grid_spacing")
+                ]
+            )
+            prefixes.extend(array_prefixes)
+            continue
+        roi_prefix = f"{_PROCESSING_GROUP}/{plane}/{_ROI_TABLE}/"
+        image_prefix = f"{_PROCESSING_GROUP}/{plane}/images/"
+        optophys_prefix = f"{_OPTOPHYS_GROUP}/{plane}/"
+        for metadata_key in metadata:
+            if not metadata_key.endswith("/.zarray"):
+                continue
+            array_path = metadata_key[: -len("/.zarray")]
+            name = array_path.rsplit("/", 1)[-1]
+            if (
+                array_path.startswith(roi_prefix)
+                and name in {"id", "is_soma", "pixel_mask", "pixel_mask_index"}
+                or array_path.startswith(image_prefix)
+                and "projection" in name
+                or array_path.startswith(optophys_prefix)
+                and name in {"location", "imaging_rate", "grid_spacing"}
+            ):
+                prefixes.append(array_path)
+    return _download_array_store(client, bucket, nwb_prefix, prefixes, zmetadata)
+
+
+def _nwb_context(location: str):
+    """Return the S3 client, NWB prefix, metadata bytes, and consolidated metadata."""
     bucket, key = _parse_s3(location)
     client = boto3.client("s3", config=Config(max_pool_connections=_MAX_WORKERS))
     nwb_prefix = _find_nwb_prefix(client, bucket, key)
@@ -141,12 +197,47 @@ def _open_nwb_zarr(location: str):
         return None
     try:
         metadata = json.loads(zmetadata).get("metadata", {})
-    except json.JSONDecodeError:
+    except (TypeError, json.JSONDecodeError):
         return None
-    planes = _plane_names(metadata)
+    return client, bucket, nwb_prefix, zmetadata, metadata
+
+
+def _open_nwb_zarr(location: str):
+    """Open a modern dense-mask pophys NWB Zarr group, or None if not present.
+
+    Reads only the consolidated metadata and the ROI/projection chunks via boto3
+    (concurrently), avoiding any full-file download. Returns the consolidated zarr
+    root group.
+    """
+    import zarr
+
+    context = _nwb_context(location)
+    if context is None:
+        return None
+    client, bucket, nwb_prefix, zmetadata, metadata = context
+    planes = [
+        plane
+        for plane in _plane_names(metadata)
+        if f"{_PROCESSING_GROUP}/{plane}/{_ROI_TABLE}/image_mask/.zarray" in metadata
+    ]
     if not planes:
         return None
     store = _download_zarr_store(client, bucket, nwb_prefix, planes, zmetadata)
+    return zarr.open_consolidated(store, mode="r")
+
+
+def _open_legacy_nwb_zarr(location: str):
+    """Open a legacy sparse pixel-mask pophys NWB Zarr group, or None if absent."""
+    import zarr
+
+    context = _nwb_context(location)
+    if context is None:
+        return None
+    client, bucket, nwb_prefix, zmetadata, metadata = context
+    planes = _legacy_plane_names(metadata)
+    if not planes:
+        return None
+    store = _download_legacy_zarr_store(client, bucket, nwb_prefix, planes, metadata, zmetadata)
     return zarr.open_consolidated(store, mode="r")
 
 
@@ -154,10 +245,53 @@ def _parse_location_attr(location_attr: str) -> tuple[str | None, float | None]:
     """Parse ``structure`` and ``depth_um`` from an imaging-plane ``location`` string."""
     if not location_attr:
         return None, None
+    location_attr = str(location_attr)
     match = _LOCATION_RE.search(location_attr)
+    if match is not None:
+        return match.group("structure"), float(match.group("depth"))
+    match = _DEPTH_ONLY_RE.search(location_attr)
     if match is None:
         return None, None
-    return match.group("structure"), float(match.group("depth"))
+    return None, float(match.group("depth"))
+
+
+def _array_value(group, name):
+    """Return a scalar or list from a Zarr array in a group."""
+    if group is None:
+        return None
+    try:
+        if name not in group:
+            return None
+        value = np.asarray(group[name][:])
+    except (KeyError, TypeError):
+        return None
+    if value.size == 0:
+        return None
+    return value.item() if value.size == 1 else value.tolist()
+
+
+def _sparse_mask(pixel_mask: np.ndarray) -> tuple[np.ndarray, int, int] | None:
+    """Convert an NWB sparse pixel mask to a padded local boolean mask."""
+    if len(pixel_mask) == 0:
+        return None
+    if pixel_mask.dtype.names:
+        xs = pixel_mask["x"]
+        ys = pixel_mask["y"]
+        weights = pixel_mask["weight"]
+    else:
+        xs = pixel_mask[:, 0]
+        ys = pixel_mask[:, 1]
+        weights = pixel_mask[:, 2]
+    valid = np.isfinite(weights) & (weights > 0)
+    if not valid.any():
+        return None
+    xs = xs[valid].astype(int)
+    ys = ys[valid].astype(int)
+    x_origin = int(xs.min()) - 1
+    y_origin = int(ys.min()) - 1
+    mask = np.zeros((int(ys.max()) - y_origin + 2, int(xs.max()) - x_origin + 2), dtype=bool)
+    mask[ys - y_origin, xs - x_origin] = True
+    return mask, x_origin, y_origin
 
 
 def _mask_contour(mask: np.ndarray) -> list[list[float]] | None:
@@ -218,7 +352,7 @@ def _extract_plane_rois(
     group = root[_PROCESSING_GROUP][plane]
     roi_table = group["image_segmentation"]["roi_table"]
 
-    image_mask = roi_table["image_mask"][:]
+    image_masks = roi_table["image_mask"][:]
     roi_ids = roi_table["id"][:]
     is_soma = roi_table["is_soma"][:] if "is_soma" in roi_table else np.zeros(len(roi_ids), dtype="int64")
     soma_probability = (
@@ -229,7 +363,8 @@ def _extract_plane_rois(
 
     optophys = root.get(f"{_OPTOPHYS_GROUP}/{plane}")
     attrs = dict(optophys.attrs) if optophys is not None else {}
-    structure, depth_um = _parse_location_attr(attrs.get("location", ""))
+    location_attr = attrs.get("location")
+    structure, depth_um = _parse_location_attr(location_attr)
     imaging_rate = attrs.get("imaging_rate")
     grid_spacing = attrs.get("grid_spacing")
 
@@ -241,9 +376,7 @@ def _extract_plane_rois(
 
     rows = []
     for i in range(len(roi_ids)):
-        mask = image_mask[i] > 0
-        if not mask.any():
-            continue
+        mask = image_masks[i] > 0
         contour = _mask_contour(mask)
         if contour is None:
             continue
@@ -260,6 +393,136 @@ def _extract_plane_rois(
                 "roi_id": int(roi_ids[i]),
                 "is_soma": int(is_soma[i]),
                 "soma_probability": float(soma_probability[i]),
+                "centroid_x": float(xs.mean()),
+                "centroid_y": float(ys.mean()),
+                "area_px": int(mask.sum()),
+                "contour": json.dumps(contour),
+            }
+        )
+    return rows
+
+
+def _extract_legacy_plane_rois(
+    root, plane: str, asset_name: str, raw_name: str | None
+) -> list[dict]:
+    """Build ROI records from a legacy NWB sparse pixel-mask table."""
+    group = root[_PROCESSING_GROUP][plane]
+    roi_table = group["image_segmentation"]["roi_table"]
+    roi_ids = roi_table["id"][:]
+    pixel_mask = roi_table["pixel_mask"][:]
+    pixel_mask_index = roi_table["pixel_mask_index"][:]
+    is_soma = roi_table["is_soma"][:] if "is_soma" in roi_table else np.zeros(len(roi_ids), dtype="int64")
+
+    optophys = root.get(f"{_OPTOPHYS_GROUP}/{plane}")
+    attrs = dict(optophys.attrs) if optophys is not None else {}
+    location_attr = attrs.get("location") or _array_value(optophys, "location")
+    structure, depth_um = _parse_location_attr(location_attr)
+    imaging_rate = attrs.get("imaging_rate")
+    if imaging_rate is None:
+        imaging_rate = _array_value(optophys, "imaging_rate")
+    grid_spacing = attrs.get("grid_spacing")
+    if grid_spacing is None:
+        grid_spacing = _array_value(optophys, "grid_spacing")
+
+    images = group["images"] if "images" in group else None
+    if images is not None:
+        for name in (f"max_projection_denoised_{plane}", f"max_projection_raw_{plane}"):
+            if name in images:
+                _write_fov_png(asset_name, plane, "max", images[name][:])
+                break
+        for name in (f"mean_projection_denoised_{plane}", f"mean_projection_raw_{plane}"):
+            if name in images:
+                _write_fov_png(asset_name, plane, "avg", images[name][:])
+                break
+
+    rows = []
+    for i in range(len(roi_ids)):
+        end = int(pixel_mask_index[i])
+        start = int(pixel_mask_index[i - 1]) if i else 0
+        if end <= start or end > len(pixel_mask):
+            continue
+        sparse = _sparse_mask(pixel_mask[start:end])
+        if sparse is None:
+            continue
+        mask, x_origin, y_origin = sparse
+        contour = _mask_contour(mask)
+        if contour is None:
+            continue
+        contour = [[x + x_origin, y + y_origin] for x, y in contour]
+        ys, xs = np.nonzero(mask)
+        xs = xs + x_origin
+        ys = ys + y_origin
+        rows.append(
+            {
+                "asset_name": asset_name,
+                "raw_name": raw_name,
+                "plane": plane,
+                "structure": structure,
+                "depth_um": depth_um,
+                "imaging_rate": float(imaging_rate) if imaging_rate is not None else None,
+                "grid_spacing_um": json.dumps(list(grid_spacing)) if grid_spacing is not None else None,
+                "roi_id": int(roi_ids[i]),
+                "is_soma": int(is_soma[i]),
+                "soma_probability": None,
+                "centroid_x": float(xs.mean()),
+                "centroid_y": float(ys.mean()),
+                "area_px": int(mask.sum()),
+                "contour": json.dumps(contour),
+            }
+        )
+    return rows
+
+
+def _extract_legacy_single_plane_rois(
+    root, asset_name: str, raw_name: str | None
+) -> list[dict]:
+    """Build ROI records from the older shared legacy PlaneSegmentation table."""
+    roi_table = root[_LEGACY_SINGLE_ROI]
+    roi_ids = roi_table["id"][:]
+    pixel_mask = roi_table["pixel_mask"][:]
+    pixel_mask_index = roi_table["pixel_mask_index"][:]
+    is_soma = roi_table["is_soma"][:] if "is_soma" in roi_table else np.zeros(len(roi_ids), dtype="int64")
+
+    optophys = root.get(_LEGACY_SINGLE_OPTOPHYS)
+    attrs = dict(optophys.attrs) if optophys is not None else {}
+    location_attr = attrs.get("location") or _array_value(optophys, "location")
+    structure, depth_um = _parse_location_attr(location_attr)
+    imaging_rate = attrs.get("imaging_rate") or _array_value(optophys, "imaging_rate")
+    grid_spacing = attrs.get("grid_spacing") or _array_value(optophys, "grid_spacing")
+
+    images = root.get(_LEGACY_SINGLE_IMAGES)
+    if images is not None and "maximum_intensity_projection" in images:
+        _write_fov_png(asset_name, _LEGACY_SINGLE_PLANE, "max", images["maximum_intensity_projection"][:])
+
+    rows = []
+    for i in range(len(roi_ids)):
+        end = int(pixel_mask_index[i])
+        start = int(pixel_mask_index[i - 1]) if i else 0
+        if end <= start or end > len(pixel_mask):
+            continue
+        sparse = _sparse_mask(pixel_mask[start:end])
+        if sparse is None:
+            continue
+        mask, x_origin, y_origin = sparse
+        contour = _mask_contour(mask)
+        if contour is None:
+            continue
+        contour = [[x + x_origin, y + y_origin] for x, y in contour]
+        ys, xs = np.nonzero(mask)
+        xs = xs + x_origin
+        ys = ys + y_origin
+        rows.append(
+            {
+                "asset_name": asset_name,
+                "raw_name": raw_name,
+                "plane": _LEGACY_SINGLE_PLANE,
+                "structure": structure,
+                "depth_um": depth_um,
+                "imaging_rate": float(imaging_rate) if imaging_rate is not None else None,
+                "grid_spacing_um": json.dumps(list(grid_spacing)) if grid_spacing is not None else None,
+                "roi_id": int(roi_ids[i]),
+                "is_soma": int(is_soma[i]),
+                "soma_probability": None,
                 "centroid_x": float(xs.mean()),
                 "centroid_y": float(ys.mean()),
                 "area_px": int(mask.sum()),
@@ -300,16 +563,23 @@ def _fetch_asset_pophys(asset_name: str, location: str | None = None, raw_name: 
         return pd.DataFrame()
 
     root = _open_nwb_zarr(location)
+    extractor = _extract_plane_rois
+    if root is None:
+        root = _open_legacy_nwb_zarr(location)
+        extractor = _extract_legacy_plane_rois
     if root is None:
         _log(f"No pophys NWB file found for asset {asset_name}")
         return pd.DataFrame()
 
     rows = []
     for plane in sorted(root[_PROCESSING_GROUP].group_keys()):
+        if plane == _LEGACY_SINGLE_PLANE:
+            rows.extend(_extract_legacy_single_plane_rois(root, asset_name, raw_name))
+            continue
         plane_group = root[_PROCESSING_GROUP][plane]
         if "image_segmentation" not in plane_group:
             continue
-        rows.extend(_extract_plane_rois(root, plane, asset_name, raw_name))
+        rows.extend(extractor(root, plane, asset_name, raw_name))
     del root
 
     if not rows:

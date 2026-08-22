@@ -42,7 +42,17 @@ from .cache_table_helpers.platform_mouselight import platform_mouselight_columns
 from .cache_table_helpers.platform_pophys import platform_pophys_columns
 from .cache_table_helpers.platform_qc import PLATFORMS, platform_qc_columns
 from .cache_table_helpers.platform_smartspim import assets_smartspim_columns
-from .cache_table_helpers.platform_swdb import swdb_2025_bci_columns, swdb_2025_v1dd_columns
+from .cache_table_helpers.platform_swdb import (
+    swdb_2025_bci_columns,
+    swdb_2025_v1dd_columns,
+    swdb_2026_bci_columns,
+    swdb_2026_v1dd_columns,
+    swdb_2026_visual_learning_columns,
+    swdb_2026_visual_coding_neuropixels_columns,
+    swdb_2026_visual_coding_ophys_columns,
+    swdb_2026_dynamic_routing_columns,
+    swdb_2026_neuropixels_opto_columns,
+)
 from .cache_table_helpers.platform_video_frame_times import platform_video_frame_times_columns
 from .cache_table_helpers.qc import qc_columns
 from .cache_table_helpers.shared.cloudwatch_utils import build_all_operations
@@ -219,6 +229,62 @@ def _entry_builders() -> dict[str, Callable[[], CacheTable]]:
             partitioned=False,
             type=CacheTableType.platform,
             columns=swdb_2025_v1dd_columns(),
+        ),
+        NAMES["swdb_2026_bci"]: lambda: CacheTable(
+            name=NAMES["swdb_2026_bci"],
+            description="SWDB 2026 public Code Ocean collection BCI data asset membership",
+            location=BACKEND.get_location(NAMES["swdb_2026_bci"]),
+            partitioned=False,
+            type=CacheTableType.platform,
+            columns=swdb_2026_bci_columns(),
+        ),
+        NAMES["swdb_2026_v1dd"]: lambda: CacheTable(
+            name=NAMES["swdb_2026_v1dd"],
+            description="SWDB 2026 public Code Ocean collection V1DD data asset membership",
+            location=BACKEND.get_location(NAMES["swdb_2026_v1dd"]),
+            partitioned=False,
+            type=CacheTableType.platform,
+            columns=swdb_2026_v1dd_columns(),
+        ),
+        NAMES["swdb_2026_visual_learning"]: lambda: CacheTable(
+            name=NAMES["swdb_2026_visual_learning"],
+            description="SWDB 2026 public Code Ocean collection Visual Learning data asset membership",
+            location=BACKEND.get_location(NAMES["swdb_2026_visual_learning"]),
+            partitioned=False,
+            type=CacheTableType.platform,
+            columns=swdb_2026_visual_learning_columns(),
+        ),
+        NAMES["swdb_2026_visual_coding_neuropixels"]: lambda: CacheTable(
+            name=NAMES["swdb_2026_visual_coding_neuropixels"],
+            description="SWDB 2026 public Code Ocean collection Visual Coding Neuropixels membership",
+            location=BACKEND.get_location(NAMES["swdb_2026_visual_coding_neuropixels"]),
+            partitioned=False,
+            type=CacheTableType.platform,
+            columns=swdb_2026_visual_coding_neuropixels_columns(),
+        ),
+        NAMES["swdb_2026_visual_coding_ophys"]: lambda: CacheTable(
+            name=NAMES["swdb_2026_visual_coding_ophys"],
+            description="SWDB 2026 public Code Ocean collection Visual Coding Ophys membership",
+            location=BACKEND.get_location(NAMES["swdb_2026_visual_coding_ophys"]),
+            partitioned=False,
+            type=CacheTableType.platform,
+            columns=swdb_2026_visual_coding_ophys_columns(),
+        ),
+        NAMES["swdb_2026_dynamic_routing"]: lambda: CacheTable(
+            name=NAMES["swdb_2026_dynamic_routing"],
+            description="SWDB 2026 public Code Ocean collection Dynamic Routing membership",
+            location=BACKEND.get_location(NAMES["swdb_2026_dynamic_routing"]),
+            partitioned=False,
+            type=CacheTableType.platform,
+            columns=swdb_2026_dynamic_routing_columns(),
+        ),
+        NAMES["swdb_2026_neuropixels_opto"]: lambda: CacheTable(
+            name=NAMES["swdb_2026_neuropixels_opto"],
+            description="SWDB 2026 public Code Ocean collection Neuropixels Opto membership",
+            location=BACKEND.get_location(NAMES["swdb_2026_neuropixels_opto"]),
+            partitioned=False,
+            type=CacheTableType.platform,
+            columns=swdb_2026_neuropixels_opto_columns(),
         ),
         NAMES["video_frame_times"]: lambda: CacheTable(
             name=NAMES["video_frame_times"],

@@ -1,6 +1,6 @@
 """Run the pophys ROI cache sync on a few (random) test assets.
 
-Picks derived multiplane-ophys (`pophys`) assets from `asset_basics`, force-builds
+Picks derived pophys assets from `asset_basics`, force-builds
 the `platform_pophys` cache table for each (reading segmentation masks from the S3
 NWB Zarr, tracing ROI contours, and writing FOV projection PNGs), then reads the
 partition back and prints a short summary so you can sanity-check the output.
@@ -24,11 +24,10 @@ from biodata_cache.registry import NAMES, TABLE_REGISTRY
 
 
 def _derived_pophys_assets(refresh_basics: bool) -> tuple[list[str], dict[str, str]]:
-    """Return processed multiplane-ophys asset names and a name -> S3 location map.
+    """Return derived pophys asset names and a name -> S3 location map.
 
-    Only the canonical processing-pipeline outputs (``multiplane-ophys_*_processed_*``)
-    carry the segmentation ROI table; other derived pophys assets have no segmentation
-    NWB, so they are excluded.
+    The table helper probes each derived pophys asset and selects the compatible NWB
+    layout, so asset names are not used to decide whether an asset is processable.
     """
     df_basics = TABLE_REGISTRY[NAMES["basics"]](force_update=refresh_basics)
 
@@ -36,10 +35,7 @@ def _derived_pophys_assets(refresh_basics: bool) -> tuple[list[str], dict[str, s
         lambda x: x is not None and not isinstance(x, float) and any("pophys" in m.lower() for m in x)
     )
     derived = df_basics[pophys_mask & (df_basics["data_level"] == "derived")]
-    name_mask = derived["name"].apply(
-        lambda n: isinstance(n, str) and n.startswith("multiplane-ophys_") and "_processed_" in n
-    )
-    asset_names = derived[name_mask]["name"].dropna().unique().tolist()
+    asset_names = derived["name"].dropna().unique().tolist()
     location_map = dict(zip(df_basics["name"], df_basics["location"], strict=False))
     return asset_names, location_map
 

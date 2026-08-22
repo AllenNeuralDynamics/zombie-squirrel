@@ -64,6 +64,13 @@ NAMES = {
     "storage_lens": "storage_lens",
     "swdb_2025_bci": "swdb_2025_bci",
     "swdb_2025_v1dd": "swdb_2025_v1dd",
+    "swdb_2026_bci": "swdb_2026_bci",
+    "swdb_2026_v1dd": "swdb_2026_v1dd",
+    "swdb_2026_visual_learning": "swdb_2026_visual_learning",
+    "swdb_2026_visual_coding_neuropixels": "swdb_2026_visual_coding_neuropixels",
+    "swdb_2026_visual_coding_ophys": "swdb_2026_visual_coding_ophys",
+    "swdb_2026_dynamic_routing": "swdb_2026_dynamic_routing",
+    "swdb_2026_neuropixels_opto": "swdb_2026_neuropixels_opto",
 }
 
 TABLE_REGISTRY: dict[str, Callable[[], Any]] = {}

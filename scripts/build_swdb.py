@@ -13,14 +13,25 @@ Usage:
 """
 
 import logging
+import os
 
 from biodata_cache.registry import NAMES, TABLE_REGISTRY
 from biodata_cache.sync import publish_registry_fragment
 
-TABLES = ["swdb_2025_bci", "swdb_2025_v1dd"]
+TABLES = [
+    "swdb_2026_bci",
+    "swdb_2026_v1dd",
+    "swdb_2026_visual_learning",
+    "swdb_2026_visual_coding_neuropixels",
+    "swdb_2026_visual_coding_ophys",
+    "swdb_2026_dynamic_routing",
+    "swdb_2026_neuropixels_opto",
+]
 
 
 def main():
+    if os.getenv("BIODATA_CACHE_BACKEND", "").lower() != "s3":
+        raise RuntimeError("The SWDB public-collection builder must run with BIODATA_CACHE_BACKEND=s3")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     for key in TABLES:

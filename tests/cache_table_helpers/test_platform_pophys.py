@@ -10,7 +10,10 @@ import pytest
 from biodata_cache.cache_table_helpers.platform_pophys import (
     _download_zarr_store,
     _extract_plane_rois,
+    _extract_legacy_plane_rois,
+    _extract_legacy_single_plane_rois,
     _fetch_asset_pophys,
+    _legacy_plane_names,
     _find_nwb_prefix,
     _mask_contour,
     _parse_location_attr,
@@ -26,6 +29,12 @@ from biodata_cache.cache_table_helpers.platform_pophys import (
 class _FakeGroup(dict):
     def group_keys(self):
         return list(self.keys())
+
+
+class _FakeOptophys(dict):
+    def __init__(self, values):
+        super().__init__(values)
+        self.attrs = {}
 
 
 class _FakeRoot:
@@ -75,6 +84,72 @@ def _fake_root():
     return _FakeRoot(processing, optophys)
 
 
+def _fake_legacy_root():
+    pixels = np.array(
+        [(3, 3, 1.0), (4, 3, 1.0), (5, 3, 1.0), (3, 4, 1.0), (4, 4, 1.0), (5, 4, 1.0)],
+        dtype=[("x", "u4"), ("y", "u4"), ("weight", "f4")],
+    )
+    roi_table = {
+        "id": np.array([42], dtype="int64"),
+        "is_soma": np.array([True]),
+        "pixel_mask": pixels,
+        "pixel_mask_index": np.array([len(pixels)], dtype="uint32"),
+    }
+    images = {
+        "max_projection_denoised_plane-0": np.ones((8, 8), dtype="float32"),
+        "mean_projection_denoised_plane-0": np.ones((8, 8), dtype="float32"),
+    }
+    processing = _FakeGroup(
+        {"plane-0": {"image_segmentation": {"roi_table": roi_table}, "images": images}}
+    )
+    optophys = {"general/optophysiology/plane-0": _FakeOptophys({
+        "location": np.array(["242 um"]),
+        "imaging_rate": np.array([6.0]),
+        "grid_spacing": np.array([1.0, 1.0]),
+    })}
+    return _FakeRoot(processing, optophys)
+
+
+def _fake_legacy_single_root():
+    pixels = np.array(
+        [(3, 3, 1.0), (4, 3, 1.0), (5, 3, 1.0), (3, 4, 1.0), (4, 4, 1.0), (5, 4, 1.0)],
+        dtype=[("x", "u4"), ("y", "u4"), ("weight", "f4")],
+    )
+    return _FakeLegacySingleRoot(
+        {
+            "processing/ophys/ImageSegmentation/PlaneSegmentation": {
+                "id": np.array([42], dtype="int64"),
+                "pixel_mask": pixels,
+                "pixel_mask_index": np.array([len(pixels)], dtype="uint16"),
+            },
+            "processing/ophys/SummaryImages": {
+                "maximum_intensity_projection": np.ones((8, 8), dtype="float32"),
+            },
+        },
+        {
+            "general/optophysiology/ImagingPlane": _FakeOptophys(
+                {
+                    "location": np.array(["242 um"]),
+                    "imaging_rate": np.array([6.0]),
+                    "grid_spacing": np.array([1.0, 1.0]),
+                }
+            )
+        },
+    )
+
+
+class _FakeLegacySingleRoot:
+    def __init__(self, groups, optophys):
+        self._groups = groups
+        self._optophys = optophys
+
+    def __getitem__(self, key):
+        return self._groups[key]
+
+    def get(self, key):
+        return self._optophys.get(key) or self._groups.get(key)
+
+
 def test_parse_s3_valid():
     assert _parse_s3("s3://bucket/a/b/") == ("bucket", "a/b")
 
@@ -107,6 +182,16 @@ def test_find_nwb_prefix_not_found():
     assert _find_nwb_prefix(client, "bucket", "k") is None
 
 
+def test_legacy_plane_names_from_metadata():
+    metadata = {"processing/plane-0/image_segmentation/roi_table/pixel_mask/.zarray": {}}
+    assert _legacy_plane_names(metadata) == ["plane-0"]
+
+
+def test_legacy_plane_names_from_shared_table():
+    metadata = {"processing/ophys/ImageSegmentation/PlaneSegmentation/pixel_mask/.zarray": {}}
+    assert _legacy_plane_names(metadata) == ["ophys"]
+
+
 def test_plane_names_from_metadata():
     metadata = {
         "processing/VISp_1/image_segmentation/roi_table/id/.zarray": {},
@@ -133,6 +218,10 @@ def test_parse_location_attr_empty():
 
 def test_parse_location_attr_no_match():
     assert _parse_location_attr("nothing here") == (None, None)
+
+
+def test_parse_location_attr_depth_only():
+    assert _parse_location_attr("242 um") == (None, 242.0)
 
 
 def test_mask_contour_returns_polygon():
@@ -195,6 +284,43 @@ def test_extract_plane_rois_builds_records(mock_registry):
 
 
 @patch("biodata_cache.cache_table_helpers.platform_pophys.registry")
+def test_extract_legacy_plane_rois_builds_records(mock_registry):
+    mock_registry.BACKEND = MagicMock()
+    rows = _extract_legacy_plane_rois(_fake_legacy_root(), "plane-0", "asset_x", "raw_x")
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["roi_id"] == 42
+    assert row["is_soma"] == 1
+    assert row["soma_probability"] is None
+    assert row["depth_um"] == 242.0
+    assert row["imaging_rate"] == 6.0
+    assert row["grid_spacing_um"] == "[1.0, 1.0]"
+    assert row["centroid_x"] == 4.0
+    assert row["centroid_y"] == 3.5
+    assert mock_registry.BACKEND.put_bytes.call_count == 2
+
+
+@patch("biodata_cache.cache_table_helpers.platform_pophys.registry")
+def test_extract_legacy_single_plane_rois_builds_records(mock_registry):
+    mock_registry.BACKEND = MagicMock()
+    rows = _extract_legacy_single_plane_rois(_fake_legacy_single_root(), "asset_x", "raw_x")
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["plane"] == "ophys"
+    assert row["roi_id"] == 42
+    assert row["is_soma"] == 0
+    assert row["soma_probability"] is None
+    assert row["depth_um"] == 242.0
+    assert row["imaging_rate"] == 6.0
+    assert row["grid_spacing_um"] == "[1.0, 1.0]"
+    assert row["centroid_x"] == 4.0
+    assert row["centroid_y"] == 3.5
+    assert mock_registry.BACKEND.put_bytes.call_count == 1
+
+
+@patch("biodata_cache.cache_table_helpers.platform_pophys.registry")
 @patch("biodata_cache.cache_table_helpers.platform_pophys._open_nwb_zarr")
 def test_fetch_asset_writes_partition(mock_open, mock_registry):
     mock_registry.NAMES = {"pophys": "platform_pophys"}
@@ -214,11 +340,13 @@ def test_fetch_asset_writes_partition(mock_open, mock_registry):
 
 @patch("biodata_cache.cache_table_helpers.platform_pophys.registry")
 @patch("biodata_cache.cache_table_helpers.platform_pophys._open_nwb_zarr")
-def test_fetch_asset_no_nwb(mock_open, mock_registry):
+@patch("biodata_cache.cache_table_helpers.platform_pophys._open_legacy_nwb_zarr")
+def test_fetch_asset_no_nwb(mock_legacy_open, mock_open, mock_registry):
     mock_registry.NAMES = {"pophys": "platform_pophys"}
     mock_registry.BACKEND = MagicMock()
     mock_registry.BACKEND.__class__.__name__ = "MemoryBackend"
     mock_open.return_value = None
+    mock_legacy_open.return_value = None
 
     result = _fetch_asset_pophys("asset_x", location="s3://bucket/k")
 

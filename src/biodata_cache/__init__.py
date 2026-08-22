@@ -31,6 +31,13 @@ from biodata_cache.cache_table_helpers.platform_smartspim import assets_smartspi
 from biodata_cache.cache_table_helpers.platform_swdb import (  # noqa: F401
     swdb_2025_bci,
     swdb_2025_v1dd,
+    swdb_2026_bci,
+    swdb_2026_v1dd,
+    swdb_2026_visual_learning,
+    swdb_2026_visual_coding_neuropixels,
+    swdb_2026_visual_coding_ophys,
+    swdb_2026_dynamic_routing,
+    swdb_2026_neuropixels_opto,
 )
 from biodata_cache.cache_table_helpers.platform_video_frame_times import platform_video_frame_times  # noqa: F401
 from biodata_cache.cache_table_helpers.qc import qc, qc_columns  # noqa: F401
