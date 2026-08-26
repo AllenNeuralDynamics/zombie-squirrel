@@ -10,7 +10,7 @@ jobs:
 
     steps:
       - name: Link to parent issue in aind-scientific-computing
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.SERVICE_TOKEN }}
           script: |
