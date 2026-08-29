@@ -28,7 +28,7 @@ from biodata_cache.models import Column
 from biodata_cache.utils import CacheLogMessage, setup_logging
 
 _UNITS_GROUP = "units"
-_SPIKE_ARRAYS = ["spike_times", "spike_times_index", "unit_name", "device_name"]
+_SPIKE_ARRAYS = ["spike_times", "spike_times_index", "unit_name", "unit_id", "device_name"]
 _S3_URI_RE = re.compile(r"^s3://([^/]+)/(.+)$")
 _EXPERIMENT_RE = re.compile(r"(experiment\d+_recording\d+)")
 _MAX_WORKERS = 32
@@ -57,15 +57,33 @@ def _parse_s3(location: str) -> tuple[str, str]:
     return match.group(1), match.group(2).rstrip("/")
 
 
-def _find_nwb_prefixes(client, bucket: str, key: str) -> list[str]:
-    """Return the S3 key prefixes of every ``*.nwb`` directory under ``<key>/nwb/``."""
-    resp = client.list_objects_v2(Bucket=bucket, Prefix=f"{key}/nwb/", Delimiter="/")
-    prefixes = []
+_NWB_DIR_SUFFIXES = (".nwb.zarr", ".nwb")
+
+
+def _list_nwb_dirs(client, bucket: str, prefix: str) -> list[str]:
+    """Return common-prefix directories under ``prefix`` that look like an NWB store."""
+    resp = client.list_objects_v2(Bucket=bucket, Prefix=prefix, Delimiter="/")
+    dirs = []
     for entry in resp.get("CommonPrefixes", []):
-        prefix = entry["Prefix"].rstrip("/")
-        if prefix.endswith(".nwb"):
-            prefixes.append(prefix)
-    return prefixes
+        candidate = entry["Prefix"].rstrip("/")
+        if candidate.endswith(_NWB_DIR_SUFFIXES):
+            dirs.append(candidate)
+    return dirs
+
+
+def _find_nwb_prefixes(client, bucket: str, key: str) -> list[str]:
+    """Return the S3 key prefixes of every NWB store belonging to one asset.
+
+    Checks the conventional ``<key>/nwb/*.nwb/`` layout used by sorted ecephys
+    derived assets first. Falls back to the asset root itself for the flatter
+    layout used by directly-exported NWB assets, where a single
+    ``<key>/<name>.nwb.zarr/`` store sits at the asset root with no ``nwb/``
+    subfolder.
+    """
+    prefixes = _list_nwb_dirs(client, bucket, f"{key}/nwb/")
+    if prefixes:
+        return prefixes
+    return _list_nwb_dirs(client, bucket, f"{key}/")
 
 
 def _experiment_name(nwb_prefix: str) -> str:
@@ -74,7 +92,10 @@ def _experiment_name(nwb_prefix: str) -> str:
     match = _EXPERIMENT_RE.search(filename)
     if match:
         return match.group(1)
-    return filename[:-4] if filename.endswith(".nwb") else filename
+    for suffix in _NWB_DIR_SUFFIXES:
+        if filename.endswith(suffix):
+            return filename[: -len(suffix)]
+    return filename
 
 
 def _load_units_metadata(client, bucket: str, nwb_prefix: str) -> tuple[bytes, dict] | None:
@@ -163,12 +184,24 @@ def _extract_spikes(units, experiment: str):
     spikes, and each band reads only its slice of ``spike_times`` from zarr (never the
     whole array). ``device_name`` and ``unit_name`` are stored as pandas categoricals
     so per-spike columns hold small integer codes rather than 8-byte object references.
+
+    Not every NWB layout has a ``unit_name`` (UUID) array - a directly-exported NWB
+    (as opposed to one produced by the "sorted" pipeline) identifies units by
+    ``unit_id`` instead. The output column is always called ``unit_name`` regardless,
+    since that is the join key ``platform_ecephys_units`` also standardizes on (see
+    the equivalent fallback in that module) - callers should not need to know which
+    identifier a given asset's NWB actually stores.
     """
     index = np.asarray(units["spike_times_index"][:], dtype="int64")
     if index.size == 0:
         return
 
-    unit_name = np.asarray(units["unit_name"][:], dtype=object)
+    if "unit_name" in units:
+        unit_name = np.asarray(units["unit_name"][:], dtype=object)
+    elif "unit_id" in units:
+        unit_name = np.asarray(units["unit_id"][:], dtype=object)
+    else:
+        unit_name = np.array(["" for _ in range(len(index))], dtype=object)
     if "device_name" in units:
         device_name = np.asarray(units["device_name"][:], dtype=object)
     else:

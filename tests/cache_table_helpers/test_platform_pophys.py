@@ -9,12 +9,12 @@ import pytest
 
 from biodata_cache.cache_table_helpers.platform_pophys import (
     _download_zarr_store,
-    _extract_plane_rois,
     _extract_legacy_plane_rois,
     _extract_legacy_single_plane_rois,
+    _extract_plane_rois,
     _fetch_asset_pophys,
-    _legacy_plane_names,
     _find_nwb_prefix,
+    _legacy_plane_names,
     _mask_contour,
     _parse_location_attr,
     _parse_s3,
@@ -174,6 +174,14 @@ def test_find_nwb_prefix_under_nwb_subfolder():
         {"CommonPrefixes": [{"Prefix": "k/nwb/session.nwb/"}]},
     ]
     assert _find_nwb_prefix(client, "bucket", "k") == "k/nwb/session.nwb"
+
+
+def test_find_nwb_prefix_accepts_bci_behavior_nwb():
+    client = MagicMock()
+    client.list_objects_v2.return_value = {
+        "CommonPrefixes": [{"Prefix": "k/MOp2_3_0/"}, {"Prefix": "k/k_behavior_nwb/"}],
+    }
+    assert _find_nwb_prefix(client, "bucket", "k") == "k/k_behavior_nwb"
 
 
 def test_find_nwb_prefix_not_found():

@@ -28,6 +28,9 @@ HIVE_PARTITION_KEYS = {
     "platform_ecephys_spikes": "asset_name",
     "platform_ecephys_units": "asset_name",
     "platform_pophys": "asset_name",
+    "platform_visual_learning_cell_gene": "subject_id",
+    "platform_visual_learning_coreg": "subject_id",
+    "platform_visual_coding_ophys": "asset_name",
     "platform_behavior-videos_frame-times": "asset_name",
 }
 # S3 error codes that mean the object genuinely does not exist (a legitimate empty

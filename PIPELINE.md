@@ -42,7 +42,9 @@ Run **`asset_basics` first**, then all of the rest in parallel:
 | `operations`      | `platform_fib_operations`, `platform_df_operations` | — | Pulls all pipeline lifecycle events from CloudWatch in **one** Logs Insights query and routes them to each `platform_*_operations` table, so the log pull is done once and reused. Overwrites every acquisition's partition each run. |
 | `ecephys_spikes`  | `platform_ecephys_spikes` | `asset_basics` | Loops over derived `ecephys` assets; skips existing partitions. |
 | `ecephys_units`   | `platform_ecephys_units` | `asset_basics` | Loops over derived `ecephys` assets; skips existing partitions. |
-| `pophys`          | `platform_pophys` | `asset_basics` | Loops over derived `pophys` (multiplane-ophys) assets; traces ROI contours and writes FOV projection PNGs under `pophys_fov/`. Slow but small; skips existing partitions. |
+| `pophys`          | `platform_pophys` | `asset_basics` | Loops over derived `pophys`/`ophys` assets (including BCI single-plane behavior-NWB assets); traces ROI contours and writes FOV projection PNGs under `pophys_fov/` when projections are available. Slow but small; skips existing partitions. |
+| `visual_coding_ophys` | `platform_visual_coding_ophys` | `asset_basics` | Loops over canonical Visual Coding Ophys assets; caches sparse ROI contours and FOV projection PNGs under `visual_coding_ophys_fov/`. Kept separate from the generic `pophys` cache because these NWB-Zarr assets have a distinct layout. |
+| `visual_learning` | `platform_visual_learning_cell_gene`, `platform_visual_learning_coreg` | public S3 collection | Downloads the six public HCR cell-by-gene CSV/H5AD products and six ROI-to-HCR co-registration tables, writing subject_id partitions for the Visual Learning dashboard. |
 | `curriculum`      | `behavior_curriculum` | `asset_basics` | |
 | `time_to_qc`      | `time_to_qc` | `asset_basics` | |
 
@@ -94,6 +96,8 @@ asset_basics ─┼── df
               ├── ecephys_spikes
               ├── ecephys_units
               ├── pophys
+              ├── visual_coding_ophys
+              ├── visual_learning
               ├── curriculum
               └── time_to_qc
 ```
@@ -173,6 +177,8 @@ creation, so these are set up manually):
 | `ecephys_spikes` | _TBD_ | |
 | `ecephys_units`  | _TBD_ | |
 | `pophys`         | _TBD_ | |
+| `visual_coding_ophys` | _TBD_ | |
+| `visual_learning` | _TBD_ | |
 | `curriculum`     | _TBD_ | |
 | `time_to_qc`     | _TBD_ | |
 

@@ -26,6 +26,13 @@ from biodata_cache.cache_table_helpers.platform_fib_operations import platform_f
 from biodata_cache.cache_table_helpers.platform_fib_traces import platform_fib_traces  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_mouselight import platform_mouselight  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_pophys import platform_pophys  # noqa: F401
+from biodata_cache.cache_table_helpers.platform_visual_coding_ophys import (  # noqa: F401
+    platform_visual_coding_ophys,
+)
+from biodata_cache.cache_table_helpers.platform_visual_learning import (  # noqa: F401
+    platform_visual_learning_cell_gene,
+    platform_visual_learning_coreg,
+)
 from biodata_cache.cache_table_helpers.platform_qc import platform_qc  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_smartspim import assets_smartspim  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_swdb import (  # noqa: F401

@@ -90,9 +90,30 @@ def test_find_nwb_prefixes_returns_all():
     assert _find_nwb_prefixes(client, "bucket", "k") == ["k/nwb/a.nwb", "k/nwb/b.nwb"]
 
 
+def test_find_nwb_prefixes_falls_back_to_asset_root_for_zarr_layout():
+    client = MagicMock()
+    client.list_objects_v2.side_effect = [
+        {},  # no <key>/nwb/ subfolder
+        {"CommonPrefixes": [{"Prefix": "k/662892_2023-08-24.nwb.zarr/"}, {"Prefix": "k/original_metadata/"}]},
+    ]
+    assert _find_nwb_prefixes(client, "bucket", "k") == ["k/662892_2023-08-24.nwb.zarr"]
+
+
+def test_find_nwb_prefixes_prefers_nwb_subfolder_when_present():
+    client = MagicMock()
+    client.list_objects_v2.return_value = {"CommonPrefixes": [{"Prefix": "k/nwb/a.nwb/"}]}
+    assert _find_nwb_prefixes(client, "bucket", "k") == ["k/nwb/a.nwb"]
+    # Only the <key>/nwb/ prefix was queried; the root-fallback listing never ran.
+    assert client.list_objects_v2.call_count == 1
+
+
 def test_experiment_name_parses_and_falls_back():
     assert _experiment_name("k/nwb/e_1_experiment3_recording2.nwb") == "experiment3_recording2"
     assert _experiment_name("k/nwb/plain.nwb") == "plain"
+
+
+def test_experiment_name_strips_zarr_suffix_for_flat_layout():
+    assert _experiment_name("k/662892_2023-08-24.nwb.zarr") == "662892_2023-08-24"
 
 
 def test_scalar_columns_selects_per_unit_arrays():
@@ -136,6 +157,28 @@ def test_download_units_store():
     store = _download_units_store(client, "bucket", "pfx", b"ZM", ["snr"])
     assert store[".zmetadata"] == b"ZM"
     assert store["units/snr/0"] == b"c"
+
+
+class _RaisingArray:
+    """Stand-in for a units column whose zarr chunk fails to decode."""
+
+    def __getitem__(self, key):
+        raise ModuleNotFoundError("No module named 'hdmf_zarr'")
+
+
+def test_extract_units_skips_column_that_fails_to_decode():
+    class _UnitsWithUndecodableColumn(_FakeUnits):
+        def __getitem__(self, key):
+            if key == "electrode_group":
+                return _RaisingArray()
+            return super().__getitem__(key)
+
+    raising_units = _UnitsWithUndecodableColumn({"id": [0, 1], "unit_name": ["u0", "u1"]})
+    df = _extract_units(raising_units, ["id", "unit_name", "electrode_group"], "exp")
+
+    assert "electrode_group" not in df.columns
+    assert list(df["id"]) == [0, 1]
+    assert list(df["unit_name"]) == ["u0", "u1"]
 
 
 def test_extract_units_builds_rows_scalar_only():
@@ -245,6 +288,31 @@ def test_fetch_asset_concatenates_and_writes(mock_registry, mock_extract, mock_o
     assert mock_registry.BACKEND.write.call_args[0][0] == "platform_ecephys_units/asset_derived"
     assert mock_extract.call_count == 1
     assert result.empty
+
+
+@patch("biodata_cache.cache_table_helpers.platform_ecephys_units.boto3")
+@patch("biodata_cache.cache_table_helpers.platform_ecephys_units._find_nwb_prefixes")
+@patch("biodata_cache.cache_table_helpers.platform_ecephys_units._open_units_group")
+@patch("biodata_cache.cache_table_helpers.platform_ecephys_units._extract_units")
+@patch("biodata_cache.cache_table_helpers.platform_ecephys_units.registry")
+def test_fetch_asset_aliases_unit_id_when_no_unit_name(mock_registry, mock_extract, mock_open, mock_find, mock_boto3):
+    """A directly-exported NWB has unit_id but no unit_name UUID - alias it so the
+    written table's join key with platform_ecephys_spikes is always unit_name."""
+    mock_registry.NAMES = {"ecephys_units": "platform_ecephys_units"}
+    mock_registry.BACKEND = MagicMock()
+    mock_registry.BACKEND.__class__.__name__ = "MemoryBackend"
+    mock_registry.BACKEND.partition_exists.return_value = False
+    mock_find.return_value = ["k/662892_2023-08-24.nwb.zarr"]
+    mock_open.return_value = ("UNITS1", ["id", "unit_id"], {}, b"ZM")
+    mock_extract.return_value = pd.DataFrame(
+        {"experiment": ["e"], "device_name": ["Probe A"], "unit_id": ["662892_2023-08-24_A-1"], "snr": [3.0]}
+    )
+
+    _fetch_asset_ecephys_units("asset_derived", location="s3://bucket/abc")
+
+    written = mock_registry.BACKEND.write.call_args[0][1]
+    assert list(written["unit_name"]) == ["662892_2023-08-24_A-1"]
+    assert list(written["unit_id"]) == ["662892_2023-08-24_A-1"]
 
 
 @patch("biodata_cache.cache_table_helpers.platform_ecephys_units.boto3")

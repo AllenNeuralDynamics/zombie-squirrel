@@ -52,6 +52,7 @@ NAMES = {
     "ecephys_spikes": "platform_ecephys_spikes",
     "ecephys_units": "platform_ecephys_units",
     "pophys": "platform_pophys",
+    "visual_coding_ophys": "platform_visual_coding_ophys",
     "video_frame_times": "platform_behavior-videos_frame-times",
     "core": "metadata_core",
     "df_sessions": "platform_dynamic_foraging_sessions",
@@ -67,10 +68,15 @@ NAMES = {
     "swdb_2026_bci": "swdb_2026_bci",
     "swdb_2026_v1dd": "swdb_2026_v1dd",
     "swdb_2026_visual_learning": "swdb_2026_visual_learning",
+    "visual_learning_cell_gene": "platform_visual_learning_cell_gene",
+    "visual_learning_coreg": "platform_visual_learning_coreg",
     "swdb_2026_visual_coding_neuropixels": "swdb_2026_visual_coding_neuropixels",
     "swdb_2026_visual_coding_ophys": "swdb_2026_visual_coding_ophys",
     "swdb_2026_dynamic_routing": "swdb_2026_dynamic_routing",
     "swdb_2026_neuropixels_opto": "swdb_2026_neuropixels_opto",
+    "visual_coding_neuropixels_units": "platform_visual_coding_neuropixels_units",
+    "swdb_dr_switch": "platform_swdb_dr_switch",
+    "swdb_dr_switch_markers": "platform_swdb_dr_switch_markers",
 }
 
 TABLE_REGISTRY: dict[str, Callable[[], Any]] = {}

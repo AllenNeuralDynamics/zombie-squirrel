@@ -1,9 +1,10 @@
 """Population physiology (pophys) ROI cache table (partitioned by asset_name).
 
-Pulls per-ROI segmentation from the derived multiplane-ophys NWB (Zarr) on S3 and
-stores one row per (imaging plane, ROI) with a simplified boundary contour in FOV
-pixel coordinates, plus per-ROI quality fields and per-plane imaging metadata. The
-raw segmentation masks are far too large to serve to a browser, so contours are
+Pulls per-ROI segmentation from derived ophys NWB (Zarr) assets on S3 and stores one
+row per (imaging plane, ROI) with a simplified boundary contour in FOV pixel
+coordinates, plus per-ROI quality fields and per-plane imaging metadata. This
+includes BCI single-plane assets, whose Zarr root is nested under ``*_behavior_nwb``.
+The raw segmentation masks are far too large to serve to a browser, so contours are
 precomputed here. Normalized 8-bit FOV projection PNGs (max and average) are written
 as side artifacts under ``pophys_fov/<asset_name>/`` for use as a viewer backdrop.
 
@@ -63,16 +64,28 @@ def _parse_s3(location: str) -> tuple[str, str]:
 def _find_nwb_prefix(client, bucket: str, key: str) -> str | None:
     """Return the S3 key prefix of the pophys NWB Zarr directory, or None.
 
-    Looks for a directory ending in ``.nwb.zarr`` (falling back to ``.nwb``) directly
-    under the asset root and under an ``nwb/`` subfolder.
+    Most derived pophys assets expose a directory ending in ``.nwb.zarr`` (falling
+    back to ``.nwb``) directly under the asset root or under an ``nwb/`` subfolder.
+    BCI single-plane assets keep the same Zarr root in a sibling directory named
+    ``*_behavior_nwb``. Prefer the conventional NWB suffixes when both layouts are
+    present, but accept the BCI name so its dense ROI masks enter the same cache.
     """
+    candidates = []
     for base in (key, f"{key}/nwb"):
         resp = client.list_objects_v2(Bucket=bucket, Prefix=f"{base}/", Delimiter="/")
         for entry in resp.get("CommonPrefixes", []):
             prefix = entry["Prefix"].rstrip("/")
-            if prefix.endswith(".nwb.zarr") or prefix.endswith(".nwb"):
-                return prefix
-    return None
+            lower = prefix.lower()
+            if lower.endswith(".nwb.zarr"):
+                candidates.append((0, prefix))
+            elif lower.endswith(".nwb"):
+                candidates.append((1, prefix))
+            elif lower.endswith("_behavior_nwb"):
+                candidates.append((2, prefix))
+        conventional = [candidate for candidate in candidates if candidate[0] < 2]
+        if conventional:
+            return min(conventional)[1]
+    return min(candidates)[1] if candidates else None
 
 
 def _plane_names(metadata: dict) -> list[str]:
@@ -600,7 +613,7 @@ def platform_pophys(
     location: str | None = None,
     raw_name: str | None = None,
 ) -> pd.DataFrame | str:
-    """Return pophys ROI records for a single derived multiplane-ophys asset.
+    """Return pophys ROI records for a single derived ophys asset.
 
     One row per (imaging plane, ROI) with a simplified boundary contour in FOV pixel
     coordinates, per-ROI quality fields, and per-plane imaging metadata. Data is
@@ -608,7 +621,7 @@ def platform_pophys(
     artifacts under ``pophys_fov/<asset_name>/``.
 
     Args:
-        asset_name: Derived pophys asset name whose ROIs to fetch.
+        asset_name: Derived ophys asset name whose ROIs to fetch.
         force_update: If True, bypass cache and pull fresh data from the S3 NWB file,
             writing the result to the cache. An empty DataFrame is returned; read
             again without force_update (or use lazy=True) to retrieve the data.
@@ -647,8 +660,8 @@ def platform_pophys(
 def platform_pophys_columns() -> list[Column]:
     """Return platform_pophys cache table column definitions."""
     return [
-        Column(name="asset_name", description="Derived pophys (multiplane-ophys) asset name"),
-        Column(name="raw_name", description="Source raw asset name for the derived pophys asset"),
+        Column(name="asset_name", description="Derived ophys asset name"),
+        Column(name="raw_name", description="Source raw asset name for the derived ophys asset"),
         Column(name="plane", description="Imaging plane name (e.g. VISp_0)"),
         Column(name="structure", description="Targeted brain structure parsed from the imaging-plane location"),
         Column(name="depth_um", description="Imaging depth in microns parsed from the imaging-plane location"),

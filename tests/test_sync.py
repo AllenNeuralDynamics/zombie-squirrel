@@ -36,6 +36,9 @@ def _make_registry(basics_df=None, sessions_df=None):
         "platform_fib": MagicMock(),
         "platform_fib_traces": MagicMock(),
         "platform_pophys": MagicMock(),
+        "platform_visual_coding_ophys": MagicMock(),
+        "platform_visual_learning_cell_gene": MagicMock(),
+        "platform_visual_learning_coreg": MagicMock(),
         "platform_fib_operations": MagicMock(),
         "platform_df_operations": MagicMock(),
         "platform_ecephys_spikes": MagicMock(),
@@ -315,10 +318,20 @@ def test_ecephys_jobs_run_over_ecephys_assets(mock_registry, mock_backend):
 def _pophys_basics():
     return pd.DataFrame(
         {
-            "name": ["multiplane-ophys_asset_processed_1", "legacy_filtered_asset", "other"],
-            "location": ["s3://bucket/processed", "s3://bucket/filtered", "s3://bucket/other"],
-            "modalities": [["pophys"], ["pophys"], ["behavior"]],
-            "data_level": ["derived", "derived", "derived"],
+            "name": [
+                "multiplane-ophys_asset_processed_1",
+                "legacy_filtered_asset",
+                "single-plane-ophys_bci_asset",
+                "other",
+            ],
+            "location": [
+                "s3://bucket/processed",
+                "s3://bucket/filtered",
+                "s3://bucket/bci",
+                "s3://bucket/other",
+            ],
+            "modalities": [["pophys"], ["pophys"], ["ophys"], ["behavior"]],
+            "data_level": ["derived", "derived", "derived", "derived"],
         }
     )
 
@@ -336,7 +349,47 @@ def test_pophys_job_processes_all_derived_pophys_names(mock_registry, mock_backe
     assert [c.kwargs["asset_name"] for c in reg["platform_pophys"].call_args_list] == [
         "multiplane-ophys_asset_processed_1",
         "legacy_filtered_asset",
+        "single-plane-ophys_bci_asset",
     ]
+
+
+@patch("biodata_cache.sync.BACKEND")
+@patch("biodata_cache.sync.TABLE_REGISTRY")
+def test_visual_coding_ophys_job_owns_canonical_visual_coding_assets(mock_registry, mock_backend):
+    basics = pd.DataFrame(
+        {
+            "name": ["vco_asset", "ordinary_pophys"],
+            "location": ["s3://bucket/vco", "s3://bucket/ordinary"],
+            "project_name": ["Allen Brain Observatory - Visual Coding Ophys", "Other"],
+            "modalities": [["pophys"], ["pophys"]],
+            "data_level": ["derived", "derived"],
+        }
+    )
+    reg = _make_registry(basics_df=basics)
+    mock_registry.__getitem__.side_effect = reg.__getitem__
+    mock_backend.get_location.return_value = "s3://bucket/path"
+    mock_backend.partition_exists.return_value = False
+
+    run_sync_job("visual_coding_ophys")
+
+    reg["platform_visual_coding_ophys"].assert_called_once_with(
+        asset_name="vco_asset", location="s3://bucket/vco", force_update=True
+    )
+
+
+@patch("biodata_cache.sync.BACKEND")
+@patch("biodata_cache.sync.TABLE_REGISTRY")
+def test_visual_learning_job_builds_both_public_lookup_tables(mock_registry, mock_backend):
+    reg = _make_registry()
+    mock_registry.__getitem__.side_effect = reg.__getitem__
+    mock_backend.get_location.return_value = "s3://bucket/path"
+
+    run_sync_job("visual_learning")
+
+    reg["platform_visual_learning_cell_gene"].assert_called_once_with(force_update=True)
+    reg["platform_visual_learning_coreg"].assert_called_once_with(force_update=True)
+    published = {call_args[0][0] for call_args in mock_backend.put_registry_fragment.call_args_list}
+    assert published == {"platform_visual_learning_cell_gene", "platform_visual_learning_coreg"}
 
 
 @patch("biodata_cache.sync.BACKEND")
@@ -422,10 +475,10 @@ def test_update_all_tables_propagates_exceptions(mock_registry, mock_backend):
 
 
 @patch("biodata_cache.sync.BACKEND")
-def test_publish_cache_registry_writes_twenty_fragments(mock_backend):
+def test_publish_cache_registry_writes_thirty_nine_fragments(mock_backend):
     mock_backend.get_location.return_value = "s3://bucket/path"
     publish_cache_registry()
-    assert mock_backend.put_registry_fragment.call_count == 27
+    assert mock_backend.put_registry_fragment.call_count == 40
 
 
 @patch("biodata_cache.sync.BACKEND")
@@ -438,6 +491,7 @@ def test_publish_cache_registry_fragment_names(mock_backend):
         "source_data", "quality_control", "platform_smartspim", "metadata_upgrade",
         "platform_fib", "platform_qc", "platform_dynamic_foraging_sessions",
         "platform_dynamic_foraging_trials", "platform_dynamic_foraging_events",
+        "platform_visual_learning_cell_gene", "platform_visual_learning_coreg",
     ):
         assert expected in names
 

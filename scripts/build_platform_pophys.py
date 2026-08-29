@@ -32,7 +32,8 @@ def _derived_pophys_assets(refresh_basics: bool) -> tuple[list[str], dict[str, s
     df_basics = TABLE_REGISTRY[NAMES["basics"]](force_update=refresh_basics)
 
     pophys_mask = df_basics["modalities"].apply(
-        lambda x: x is not None and not isinstance(x, float) and any("pophys" in m.lower() for m in x)
+        lambda x: x is not None and not isinstance(x, float)
+        and any("pophys" in m.lower() or "ophys" in m.lower() for m in x)
     )
     derived = df_basics[pophys_mask & (df_basics["data_level"] == "derived")]
     asset_names = derived["name"].dropna().unique().tolist()
@@ -96,7 +97,7 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     all_asset_names, location_map = _derived_pophys_assets(args.refresh_basics)
-    logging.info(f"Found {len(all_asset_names)} processed multiplane-ophys assets in asset_basics.")
+    logging.info(f"Found {len(all_asset_names)} processed ophys assets in asset_basics.")
 
     if args.assets:
         requested = set(args.assets)

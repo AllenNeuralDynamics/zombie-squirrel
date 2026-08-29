@@ -79,12 +79,32 @@ def test_find_nwb_prefixes_none():
     assert _find_nwb_prefixes(client, "bucket", "k") == []
 
 
+def test_find_nwb_prefixes_falls_back_to_asset_root_for_zarr_layout():
+    client = MagicMock()
+    client.list_objects_v2.side_effect = [
+        {},  # no <key>/nwb/ subfolder
+        {"CommonPrefixes": [{"Prefix": "k/662892_2023-08-24.nwb.zarr/"}, {"Prefix": "k/original_metadata/"}]},
+    ]
+    assert _find_nwb_prefixes(client, "bucket", "k") == ["k/662892_2023-08-24.nwb.zarr"]
+
+
+def test_find_nwb_prefixes_prefers_nwb_subfolder_when_present():
+    client = MagicMock()
+    client.list_objects_v2.return_value = {"CommonPrefixes": [{"Prefix": "k/nwb/exp1.nwb/"}]}
+    assert _find_nwb_prefixes(client, "bucket", "k") == ["k/nwb/exp1.nwb"]
+    assert client.list_objects_v2.call_count == 1
+
+
 def test_experiment_name_parses_tag():
     assert _experiment_name("k/nwb/ecephys_1_2_experiment2_recording1.nwb") == "experiment2_recording1"
 
 
 def test_experiment_name_falls_back_to_stem():
     assert _experiment_name("k/nwb/weird_name.nwb") == "weird_name"
+
+
+def test_experiment_name_strips_zarr_suffix_for_flat_layout():
+    assert _experiment_name("k/662892_2023-08-24.nwb.zarr") == "662892_2023-08-24"
 
 
 def test_load_units_metadata_present():
@@ -138,6 +158,29 @@ def test_extract_spikes_builds_long_form():
     assert list(df[df["unit_name"] == "u0"]["spike_time"]) == [0.1, 0.2, 0.3]
     assert list(df[df["unit_name"] == "u1"]["spike_time"]) == [1.0, 2.0]
     assert set(df["experiment"]) == {"experiment1_recording1"}
+
+
+def test_extract_spikes_falls_back_to_unit_id_when_no_unit_name():
+    """A directly-exported NWB has unit_id but no unit_name UUID - the output
+    column is still called unit_name, matching platform_ecephys_units' own alias."""
+    units = _FakeUnits(
+        {
+            "spike_times": [0.1, 0.2, 0.3, 1.0, 2.0],
+            "spike_times_index": [3, 5],
+            "unit_id": ["662892_2023-08-24_A-1", "662892_2023-08-24_A-2"],
+            "device_name": ["Probe A", "Probe A"],
+        }
+    )
+    df = pd.concat(_extract_spikes(units, "experiment1_recording1"), ignore_index=True)
+
+    assert list(df.columns) == ["experiment", "device_name", "unit_name", "spike_time"]
+    assert set(df["unit_name"]) == {"662892_2023-08-24_A-1", "662892_2023-08-24_A-2"}
+
+
+def test_extract_spikes_missing_both_identifiers_defaults_empty():
+    units = _FakeUnits({"spike_times": [0.1, 0.2], "spike_times_index": [2]})
+    df = pd.concat(_extract_spikes(units, "exp"), ignore_index=True)
+    assert set(df["unit_name"]) == {""}
 
 
 def test_extract_spikes_missing_device_name_defaults_empty():

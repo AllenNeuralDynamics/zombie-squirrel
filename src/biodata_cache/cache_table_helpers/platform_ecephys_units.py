@@ -64,15 +64,33 @@ def _parse_s3(location: str) -> tuple[str, str]:
     return match.group(1), match.group(2).rstrip("/")
 
 
-def _find_nwb_prefixes(client, bucket: str, key: str) -> list[str]:
-    """Return the S3 key prefixes of every ``*.nwb`` directory under ``<key>/nwb/``."""
-    resp = client.list_objects_v2(Bucket=bucket, Prefix=f"{key}/nwb/", Delimiter="/")
-    prefixes = []
+_NWB_DIR_SUFFIXES = (".nwb.zarr", ".nwb")
+
+
+def _list_nwb_dirs(client, bucket: str, prefix: str) -> list[str]:
+    """Return common-prefix directories under ``prefix`` that look like an NWB store."""
+    resp = client.list_objects_v2(Bucket=bucket, Prefix=prefix, Delimiter="/")
+    dirs = []
     for entry in resp.get("CommonPrefixes", []):
-        prefix = entry["Prefix"].rstrip("/")
-        if prefix.endswith(".nwb"):
-            prefixes.append(prefix)
-    return prefixes
+        candidate = entry["Prefix"].rstrip("/")
+        if candidate.endswith(_NWB_DIR_SUFFIXES):
+            dirs.append(candidate)
+    return dirs
+
+
+def _find_nwb_prefixes(client, bucket: str, key: str) -> list[str]:
+    """Return the S3 key prefixes of every NWB store belonging to one asset.
+
+    Checks the conventional ``<key>/nwb/*.nwb/`` layout used by sorted ecephys
+    derived assets first. Falls back to the asset root itself for the flatter
+    layout used by directly-exported NWB assets, where a single
+    ``<key>/<name>.nwb.zarr/`` store sits at the asset root with no ``nwb/``
+    subfolder.
+    """
+    prefixes = _list_nwb_dirs(client, bucket, f"{key}/nwb/")
+    if prefixes:
+        return prefixes
+    return _list_nwb_dirs(client, bucket, f"{key}/")
 
 
 def _experiment_name(nwb_prefix: str) -> str:
@@ -81,7 +99,10 @@ def _experiment_name(nwb_prefix: str) -> str:
     match = _EXPERIMENT_RE.search(filename)
     if match:
         return match.group(1)
-    return filename[:-4] if filename.endswith(".nwb") else filename
+    for suffix in _NWB_DIR_SUFFIXES:
+        if filename.endswith(suffix):
+            return filename[: -len(suffix)]
+    return filename
 
 
 def _scalar_columns(metadata: dict) -> tuple[list[str], int | None]:
@@ -249,11 +270,22 @@ def _extract_units(units, scalar_cols: list[str], experiment: str) -> pd.DataFra
 
     Every per-unit scalar array becomes a column. The extremum-channel mean
     waveform is added separately by the caller (see ``_extremum_waveforms``).
+
+    A column that shape-qualifies as "one value per unit" can still fail to
+    decode: HDMF object-reference columns (e.g. ``electrode_group``, which
+    duplicates the plain string already in ``electrode_group_name``) are
+    stored with a pickle codec whose payload names classes from optional
+    extension packages (e.g. ``hdmf_zarr``) that may not be installed here.
+    Such a column is skipped rather than aborting the whole unit table.
     """
     data: dict[str, object] = {}
     n_units = None
     for name in scalar_cols:
-        arr = np.asarray(units[name][:])
+        try:
+            arr = np.asarray(units[name][:])
+        except Exception as exc:
+            _log(f"Skipping unreadable units column {name!r}: {type(exc).__name__}: {exc}")
+            continue
         data[name] = arr
         n_units = len(arr)
     if not data or not n_units:
@@ -352,6 +384,12 @@ def _fetch_asset_ecephys_units(asset_name: str, location: str | None = None) -> 
         return pd.DataFrame()
 
     df = pd.concat(frames, ignore_index=True)
+    if "unit_name" not in df.columns and "unit_id" in df.columns:
+        # A directly-exported NWB (as opposed to one from the "sorted" pipeline)
+        # identifies units by unit_id, not the unit_name UUID. Alias it so this
+        # table's join key with platform_ecephys_spikes is always unit_name,
+        # regardless of which identifier the source NWB actually stores.
+        df["unit_name"] = df["unit_id"]
     sort_cols = [c for c in ["experiment", "device_name", "unit_name"] if c in df.columns]
     if sort_cols:
         df = df.sort_values(sort_cols).reset_index(drop=True)

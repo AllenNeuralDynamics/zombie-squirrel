@@ -16,7 +16,7 @@ def test_fragments_round_trip_through_memory_backend():
         registry = get_cache_registry()
 
     assert isinstance(registry, CacheRegistry)
-    assert len(registry.tables) == 27
+    assert len(registry.tables) == 40
     names = [table.name for table in registry.tables]
     # merged registry is sorted by name for stable ordering
     assert names == sorted(names)
@@ -39,6 +39,6 @@ def test_clear_registry_removes_fragments():
     backend = MemoryBackend()
     with patch("biodata_cache.sync.BACKEND", backend):
         publish_cache_registry()
-        assert len(backend.list_registry_fragments()) == 27
+        assert len(backend.list_registry_fragments()) == 40
         backend.clear_registry()
         assert backend.list_registry_fragments() == []

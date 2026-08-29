@@ -46,14 +46,26 @@ from .cache_table_helpers.platform_swdb import (
     swdb_2025_bci_columns,
     swdb_2025_v1dd_columns,
     swdb_2026_bci_columns,
-    swdb_2026_v1dd_columns,
-    swdb_2026_visual_learning_columns,
-    swdb_2026_visual_coding_neuropixels_columns,
-    swdb_2026_visual_coding_ophys_columns,
     swdb_2026_dynamic_routing_columns,
     swdb_2026_neuropixels_opto_columns,
+    swdb_2026_v1dd_columns,
+    swdb_2026_visual_coding_neuropixels_columns,
+    swdb_2026_visual_coding_ophys_columns,
+    swdb_2026_visual_learning_columns,
+)
+from .cache_table_helpers.platform_swdb_dr_switch import (
+    platform_swdb_dr_switch_columns,
+    platform_swdb_dr_switch_markers_columns,
 )
 from .cache_table_helpers.platform_video_frame_times import platform_video_frame_times_columns
+from .cache_table_helpers.platform_visual_coding_neuropixels_units import (
+    platform_visual_coding_neuropixels_units_columns,
+)
+from .cache_table_helpers.platform_visual_coding_ophys import platform_visual_coding_ophys_columns
+from .cache_table_helpers.platform_visual_learning import (
+    platform_visual_learning_cell_gene_columns,
+    platform_visual_learning_coreg_columns,
+)
 from .cache_table_helpers.qc import qc_columns
 from .cache_table_helpers.shared.cloudwatch_utils import build_all_operations
 from .cache_table_helpers.source_data import source_data_columns
@@ -214,6 +226,33 @@ def _entry_builders() -> dict[str, Callable[[], CacheTable]]:
             type=CacheTableType.platform,
             columns=platform_pophys_columns(),
         ),
+        NAMES["visual_coding_ophys"]: lambda: CacheTable(
+            name=NAMES["visual_coding_ophys"],
+            description="Visual Coding Ophys sparse ROI contours and projection metadata, partitioned by asset_name",
+            location=BACKEND.get_location("platform_visual_coding_ophys", partitioned=True),
+            partitioned=True,
+            partition_key="asset_name",
+            type=CacheTableType.platform,
+            columns=platform_visual_coding_ophys_columns(),
+        ),
+        NAMES["visual_learning_cell_gene"]: lambda: CacheTable(
+            name=NAMES["visual_learning_cell_gene"],
+            description="Visual Learning HCR cell-by-gene counts and annotated cell types, partitioned by subject_id",
+            location=BACKEND.get_location("platform_visual_learning_cell_gene", partitioned=True),
+            partitioned=True,
+            partition_key="subject_id",
+            type=CacheTableType.platform,
+            columns=platform_visual_learning_cell_gene_columns(),
+        ),
+        NAMES["visual_learning_coreg"]: lambda: CacheTable(
+            name=NAMES["visual_learning_coreg"],
+            description="Visual Learning imaging ROI to HCR cell co-registration, partitioned by subject_id",
+            location=BACKEND.get_location("platform_visual_learning_coreg", partitioned=True),
+            partitioned=True,
+            partition_key="subject_id",
+            type=CacheTableType.platform,
+            columns=platform_visual_learning_coreg_columns(),
+        ),
         NAMES["swdb_2025_bci"]: lambda: CacheTable(
             name=NAMES["swdb_2025_bci"],
             description="SWDB 2025 BCI single-neuron-stim session metadata (one row per curated derived asset)",
@@ -285,6 +324,30 @@ def _entry_builders() -> dict[str, Callable[[], CacheTable]]:
             partitioned=False,
             type=CacheTableType.platform,
             columns=swdb_2026_neuropixels_opto_columns(),
+        ),
+        NAMES["visual_coding_neuropixels_units"]: lambda: CacheTable(
+            name=NAMES["visual_coding_neuropixels_units"],
+            description="CCF unit locations for every Visual Coding Neuropixels session (one small unpartitioned table for the SWDB neuron-locations overview)",
+            location=BACKEND.get_location(NAMES["visual_coding_neuropixels_units"]),
+            partitioned=False,
+            type=CacheTableType.platform,
+            columns=platform_visual_coding_neuropixels_units_columns(),
+        ),
+        NAMES["swdb_dr_switch"]: lambda: CacheTable(
+            name=NAMES["swdb_dr_switch"],
+            description="Dynamic Routing block-switch firing rate per QC-passing unit, averaged across every switch of each direction (one small unpartitioned table for the SWDB neuron-locations replay)",
+            location=BACKEND.get_location(NAMES["swdb_dr_switch"]),
+            partitioned=False,
+            type=CacheTableType.platform,
+            columns=platform_swdb_dr_switch_columns(),
+        ),
+        NAMES["swdb_dr_switch_markers"]: lambda: CacheTable(
+            name=NAMES["swdb_dr_switch_markers"],
+            description="Representative trial-boundary times per Dynamic Routing block-switch direction (one small unpartitioned table for the SWDB neuron-locations replay's trial axis)",
+            location=BACKEND.get_location(NAMES["swdb_dr_switch_markers"]),
+            partitioned=False,
+            type=CacheTableType.platform,
+            columns=platform_swdb_dr_switch_markers_columns(),
         ),
         NAMES["video_frame_times"]: lambda: CacheTable(
             name=NAMES["video_frame_times"],
@@ -582,7 +645,18 @@ def _job_pophys() -> None:
     """
     df_basics = _load_basics()
     location_map = _location_map(df_basics)
+    # General population-ophys assets use the ``pophys`` abbreviation, while
+    # BCI single-plane assets are registered as ``single-plane-ophys``. Both
+    # expose the same dense image_mask table once their behavior-NWB root is
+    # discovered by platform_pophys.
     asset_names = _derived_asset_names(df_basics, "pophys")
+    seen = set(asset_names)
+    asset_names.extend(
+        asset_name for asset_name in _derived_asset_names(df_basics, "ophys")
+        if asset_name not in seen
+    )
+    visual_coding_names = set(_visual_coding_ophys_asset_names(df_basics))
+    asset_names = [asset_name for asset_name in asset_names if asset_name not in visual_coding_names]
     raw_map = _raw_name_map(asset_names)
     pophys_fn = TABLE_REGISTRY[NAMES["pophys"]]
     for asset_name in asset_names:
@@ -623,6 +697,52 @@ def _job_pophys() -> None:
             # cannot abort the whole job. Log the asset name for later follow-up.
             logging.exception(f"pophys failed for asset {asset_name}: {exc}")
     publish_registry_fragment(NAMES["pophys"])
+
+
+def _visual_coding_ophys_asset_names(df_basics) -> list:
+    """Return canonical Visual Coding Ophys assets owned by the isolated job."""
+    required = {"project_name", "modalities", "data_level", "name"}
+    if not required.issubset(df_basics.columns):
+        return []
+    project = df_basics["project_name"].fillna("").astype(str).str.contains("Visual Coding Ophys", case=False)
+
+    def has_ophys_modality(values) -> bool:
+        if values is None or (isinstance(values, float) and values != values):
+            return False
+        values = [values] if isinstance(values, str) else values
+        return any("pophys" in str(value).lower() or "ophys" in str(value).lower() for value in values)
+
+    modality = df_basics["modalities"].apply(
+        has_ophys_modality
+    )
+    return df_basics[project & modality & (df_basics["data_level"] == "derived")]["name"].dropna().unique().tolist()
+
+
+def _job_visual_coding_ophys() -> None:
+    """Build sparse ROI contours for canonical Visual Coding Ophys assets."""
+    df_basics = _load_basics()
+    location_map = _location_map(df_basics)
+    asset_names = _visual_coding_ophys_asset_names(df_basics)
+    cache_fn = TABLE_REGISTRY[NAMES["visual_coding_ophys"]]
+    for asset_name in asset_names:
+        if BACKEND.partition_exists(f"{NAMES['visual_coding_ophys']}/{asset_name}"):
+            continue
+        try:
+            cache_fn(
+                asset_name=asset_name,
+                location=location_map.get(asset_name),
+                force_update=True,
+            )
+        except Exception as exc:
+            logging.exception("visual_coding_ophys failed for asset %s: %s", asset_name, exc)
+    publish_registry_fragment(NAMES["visual_coding_ophys"])
+
+
+def _job_visual_learning() -> None:
+    """Build the public Visual Learning cell-gene and co-registration tables."""
+    for key in ("visual_learning_cell_gene", "visual_learning_coreg"):
+        TABLE_REGISTRY[NAMES[key]](force_update=True)
+        publish_registry_fragment(NAMES[key])
 
 
 def _raw_asset_names_with_modality(df_basics, modality_substr: str) -> list:
@@ -690,6 +810,8 @@ JOBS: dict[str, Callable[[], None]] = {
     "ecephys_spikes": _job_ecephys_spikes,
     "ecephys_units": _job_ecephys_units,
     "pophys": _job_pophys,
+    "visual_coding_ophys": _job_visual_coding_ophys,
+    "visual_learning": _job_visual_learning,
     "video_frame_times": _job_video_frame_times,
     "curriculum": _job_curriculum,
     "time_to_qc": _job_time_to_qc,
@@ -746,6 +868,8 @@ def update_all_tables(fast: bool = True, slow: bool = True) -> None:
             "ecephys_spikes",
             "ecephys_units",
             "pophys",
+            "visual_coding_ophys",
+            "visual_learning",
             "video_frame_times",
             "curriculum",
             "time_to_qc",

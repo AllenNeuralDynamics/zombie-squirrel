@@ -18,6 +18,7 @@ from biodata_cache.cache_table_helpers import (  # noqa: F401
     platform_qc,
     platform_smartspim,
     platform_swdb,
+    platform_visual_learning,
     qc,
     raw_to_derived,
     source_data,
