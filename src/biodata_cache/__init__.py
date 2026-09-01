@@ -10,6 +10,11 @@ __version__ = "0.41.0"
 
 from biodata_cache.cache_table_helpers.asset_basics import asset_basics  # noqa: F401
 from biodata_cache.cache_table_helpers.behavior_curriculum import behavior_curriculum  # noqa: F401
+from biodata_cache.cache_table_helpers.cell_by_everything import (  # noqa: F401
+    cell_genes,
+    cell_index,
+    cell_properties,
+)
 from biodata_cache.cache_table_helpers.custom import custom  # noqa: F401
 from biodata_cache.cache_table_helpers.metadata_upgrade import metadata_upgrade  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_df import (  # noqa: F401

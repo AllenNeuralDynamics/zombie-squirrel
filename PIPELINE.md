@@ -28,7 +28,8 @@ Also required in every capsule (unchanged from before):
 
 ### Valid values for `BIODATA_CACHE_SYNC_JOB`
 
-Run **`asset_basics` first**, then all of the rest in parallel:
+Run **`asset_basics` first**, then all of the rest in parallel, then
+**`cell-by-everything` last** (it projects other jobs' output):
 
 | `BIODATA_CACHE_SYNC_JOB` | Builds | Depends on | Notes |
 |---|---|---|---|
@@ -46,11 +47,38 @@ Run **`asset_basics` first**, then all of the rest in parallel:
 | `visual_coding_ophys` | `platform_visual_coding_ophys` | `asset_basics` | Loops over canonical Visual Coding Ophys assets; caches sparse ROI contours and FOV projection PNGs under `visual_coding_ophys_fov/`. Kept separate from the generic `pophys` cache because these NWB-Zarr assets have a distinct layout. |
 | `visual_learning` | `platform_visual_learning_cell_gene`, `platform_visual_learning_coreg` | public S3 collection | Downloads the six public HCR cell-by-gene CSV/H5AD products and six ROI-to-HCR co-registration tables, writing subject_id partitions for the Visual Learning dashboard. |
 | `curriculum`      | `behavior_curriculum` | `asset_basics` | |
+| `cell-by-everything` | `cell_index`, `cell_properties`, `cell_genes` | `ecephys_units`, `pophys`, `visual_learning` | **Must run after those three jobs** (and `asset_basics`), so it is *not* in `PARALLEL_JOBS`. Projects their cached per-cell output into one row per cell across every asset, and reads the public Visual Coding Neuropixels NWB-Zarr directly. It depends on no other job and never depends on a one-off script-built table. Skips `cell_properties` partitions that already exist (reusing them to rebuild `cell_index`); `cell_index` and `cell_genes` are global objects and are always rewritten. |
 | `time_to_qc`      | `time_to_qc` | `asset_basics` | |
 
 The canonical source of truth for these values is `JOBS` in
 [`src/biodata_cache/sync.py`](src/biodata_cache/sync.py). `PARALLEL_JOBS` in that
-module is exactly the set that runs after `asset_basics`.
+module is exactly the set that runs after `asset_basics` — note that it excludes
+`cell-by-everything` as well, since that job runs after the fan-out rather than
+inside it. `CELL_BY_EVERYTHING_SOURCE_JOBS` lists the jobs it depends on.
+
+So the pipeline has three stages, not two:
+
+```
+asset_basics  ->  (every job in PARALLEL_JOBS, in parallel)  ->  cell-by-everything
+```
+
+`cell-by-everything` depends on only three of the parallel jobs — `ecephys_units`,
+`pophys` and `visual_learning` (`CELL_BY_EVERYTHING_SOURCE_JOBS`) — so if your
+Nextflow layout can express per-job dependencies it may start as soon as those
+three finish, in parallel with the rest. A simple trailing stage after the whole
+fan-out is also correct and costs little: the job is mostly parquet-to-parquet,
+plus one direct NWB read of the ~57 public Visual Coding Neuropixels sessions.
+
+If it runs before its sources finish it does not fail — it just projects fewer
+cells, which is worse than waiting.
+
+**It must never take a dependency on a one-off, script-built table** (the `swdb_*`
+tables, `platform_visual_coding_neuropixels_units`, `platform_swdb_dr_switch*`).
+Those are published by `scripts/build_*.py` outside the pipeline and are not
+re-run, so projecting one would silently pin these tables to whenever that script
+last ran. Where cells are only available from such a source, the reading logic is
+copied into `cell_by_everything/nwb_units.py` and the source reads from S3
+directly instead.
 
 An invalid or missing value raises `ValueError` listing the valid jobs, so a
 mis-set capsule fails fast rather than silently doing nothing.

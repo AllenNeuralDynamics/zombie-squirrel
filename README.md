@@ -76,6 +76,31 @@ duckdb.query("""
 The `raw_to_derived` function is not a table stored in S3, instead it is used by passing an asset_name (or list of asset names) and a modality. The function returns the latest derived asset matching the requested pattern.
 
 
+### Cells across every asset
+
+Three tables answer "what do we know about every single cell in every data
+asset?", joined on a stable `cell_key`:
+
+| Table | Grain | Partitioned by | Holds |
+|---|---|---|---|
+| `cell_index` | one row per cell | — | Identity and provenance: asset, subject, acquisition, modality, probe/plane, source unit/ROI id |
+| `cell_properties` | one row per cell | `asset_name` | CCF location, mean rate, QC, cell type, and other measurements — wide and deliberately sparse |
+| `cell_genes` | one row per genotyped cell | `subject_id` | Transcriptomic cluster labels and gene counts |
+
+```python
+import duckdb
+from biodata_cache import cell_index, cell_properties
+
+cells = cell_index()                                   # every cell, one small fetch
+props = cell_properties(asset_name=cells["asset_name"].iloc[0])
+```
+
+Most cells have only a handful of properties and NULL for the rest; that is the
+expected shape. A sync run skips `cell_properties` partitions that already exist,
+so pass `force_rewrite=True` if you need existing partitions rebuilt. `cell_key` is a hash of `(asset_name, container, cell_ref)`, so it
+is stable across cache rebuilds and safe to persist. `cell_ref` is the source
+NWB's own unit/ROI identifier, so any row can be traced back to its source.
+
 ### Custom cache table
 
 The `custom` function allows you to store and retrieve your own user-defined DataFrames in the cache by name. This requires write authentication to the active backend.
@@ -93,7 +118,8 @@ retrieved_df = custom("my_data")
 ### Update all cache tables
 
 The cache is rebuilt on Code Ocean by a set of per-table sync jobs wired into a
-Nextflow pipeline (`asset_basics` first, then the rest in parallel). Each job is
+Nextflow pipeline (`asset_basics` first, then the rest in parallel, then `cell-by-everything`).
+Each job is
 selected by the `BIODATA_CACHE_SYNC_JOB` environment variable and writes its own
 registry fragment as it completes. See [PIPELINE.md](PIPELINE.md) for the job
 list, pipeline layout, and the version-bump/re-run procedure.

@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from biodata_cache.sync import (
+    CELL_BY_EVERYTHING_SOURCE_JOBS,
     JOBS,
     PARALLEL_JOBS,
     publish_cache_registry,
@@ -96,7 +97,10 @@ def test_run_sync_job_unknown_job_raises(monkeypatch):
 
 def test_parallel_jobs_excludes_asset_basics():
     assert "asset_basics" not in PARALLEL_JOBS
-    assert set(PARALLEL_JOBS) | {"asset_basics"} == set(JOBS)
+    # cell-by-everything is also excluded: it projects the tables the parallel
+    # jobs build, so it runs as a final stage rather than alongside them.
+    assert "cell-by-everything" not in PARALLEL_JOBS
+    assert set(PARALLEL_JOBS) | {"asset_basics", "cell-by-everything"} == set(JOBS)
 
 
 # --- asset_basics job --------------------------------------------------------
@@ -393,6 +397,23 @@ def test_visual_learning_job_builds_both_public_lookup_tables(mock_registry, moc
 
 
 @patch("biodata_cache.sync.BACKEND")
+@patch("biodata_cache.sync.build_cell_by_everything")
+def test_cell_by_everything_job_builds_and_publishes_all_three(mock_build, mock_backend):
+    mock_backend.get_location.return_value = "s3://bucket/path"
+
+    run_sync_job("cell-by-everything")
+
+    mock_build.assert_called_once_with()
+    published = {call_args[0][0] for call_args in mock_backend.put_registry_fragment.call_args_list}
+    assert published == {"cell_index", "cell_properties", "cell_genes"}
+
+
+def test_cell_by_everything_sources_are_real_jobs():
+    """The documented upstream dependencies must stay valid job names."""
+    assert set(CELL_BY_EVERYTHING_SOURCE_JOBS) <= set(JOBS)
+
+
+@patch("biodata_cache.sync.BACKEND")
 @patch("biodata_cache.sync.TABLE_REGISTRY")
 def test_pophys_job_retries_child_from_processable_source(mock_registry, mock_backend):
     basics = pd.DataFrame(
@@ -475,10 +496,10 @@ def test_update_all_tables_propagates_exceptions(mock_registry, mock_backend):
 
 
 @patch("biodata_cache.sync.BACKEND")
-def test_publish_cache_registry_writes_thirty_nine_fragments(mock_backend):
+def test_publish_cache_registry_writes_a_fragment_per_table(mock_backend):
     mock_backend.get_location.return_value = "s3://bucket/path"
     publish_cache_registry()
-    assert mock_backend.put_registry_fragment.call_count == 40
+    assert mock_backend.put_registry_fragment.call_count == 43
 
 
 @patch("biodata_cache.sync.BACKEND")

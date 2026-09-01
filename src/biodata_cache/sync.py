@@ -23,6 +23,12 @@ from collections.abc import Callable
 
 from .cache_table_helpers.asset_basics import asset_basics_columns
 from .cache_table_helpers.behavior_curriculum import behavior_curriculum_columns
+from .cache_table_helpers.cell_by_everything import (
+    build_cell_by_everything,
+    cell_genes_columns,
+    cell_index_columns,
+    cell_properties_columns,
+)
 from .cache_table_helpers.metadata_upgrade import metadata_upgrade_columns
 from .cache_table_helpers.platform_df import (
     platform_dynamic_foraging_events_columns,
@@ -216,6 +222,44 @@ def _entry_builders() -> dict[str, Callable[[], CacheTable]]:
             partition_key="asset_name",
             type=CacheTableType.platform,
             columns=platform_ecephys_units_columns(),
+        ),
+        NAMES["cell_index"]: lambda: CacheTable(
+            name=NAMES["cell_index"],
+            description=(
+                "One row per cell across every data asset: identity and provenance only "
+                "(asset, subject, acquisition, modality, probe/plane, source unit/ROI id). "
+                "Join cell_key to cell_properties for measurements and cell_genes for transcriptomics."
+            ),
+            location=BACKEND.get_location(NAMES["cell_index"]),
+            partitioned=False,
+            type=CacheTableType.platform,
+            columns=cell_index_columns(),
+        ),
+        NAMES["cell_properties"]: lambda: CacheTable(
+            name=NAMES["cell_properties"],
+            description=(
+                "Per-cell properties (CCF location, mean rate, QC, cell type) keyed by cell_key, "
+                "one partition per asset_name. Deliberately wide and sparse: each cell carries only "
+                "the properties its modality and pipeline produce."
+            ),
+            location=BACKEND.get_location(NAMES["cell_properties"], partitioned=True),
+            partitioned=True,
+            partition_key="asset_name",
+            type=CacheTableType.platform,
+            columns=cell_properties_columns(),
+        ),
+        NAMES["cell_genes"]: lambda: CacheTable(
+            name=NAMES["cell_genes"],
+            description=(
+                "Transcriptomic genotyping for the few cells that have it, keyed by cell_key, "
+                "one partition per subject_id. Kept out of cell_properties because gene panels are "
+                "wide enough that sparsity stops being free in parquet."
+            ),
+            location=BACKEND.get_location(NAMES["cell_genes"], partitioned=True),
+            partitioned=True,
+            partition_key="subject_id",
+            type=CacheTableType.platform,
+            columns=cell_genes_columns(),
         ),
         NAMES["pophys"]: lambda: CacheTable(
             name=NAMES["pophys"],
@@ -783,6 +827,25 @@ def _job_video_frame_times() -> None:
     publish_registry_fragment(NAMES["video_frame_times"])
 
 
+def _job_cell_by_everything() -> None:
+    """Build the three cell-by-everything tables.
+
+    Mostly a projection over per-cell tables that are already cached, so it
+    rebuilds all three tables wholesale rather than resuming per asset. Cells that
+    are only available from a one-off script-built table are read from NWB-Zarr
+    directly instead, so this job never depends on a table the pipeline does not
+    rebuild.
+
+    It must run after ``asset_basics`` and after every job in
+    ``CELL_BY_EVERYTHING_SOURCE_JOBS``, which is why it is not part of the
+    parallel fan-out. It has no other dependencies and can run concurrently with
+    the remaining parallel jobs.
+    """
+    build_cell_by_everything()
+    for key in ("cell_index", "cell_properties", "cell_genes"):
+        publish_registry_fragment(NAMES[key])
+
+
 def _job_curriculum() -> None:
     """Build the behavior curriculum table."""
     TABLE_REGISTRY[NAMES["curriculum"]](force_update=True)
@@ -812,13 +875,22 @@ JOBS: dict[str, Callable[[], None]] = {
     "pophys": _job_pophys,
     "visual_coding_ophys": _job_visual_coding_ophys,
     "visual_learning": _job_visual_learning,
+    "cell-by-everything": _job_cell_by_everything,
     "video_frame_times": _job_video_frame_times,
     "curriculum": _job_curriculum,
     "time_to_qc": _job_time_to_qc,
 }
 
+# Jobs whose cached output cell-by-everything projects. It must run after these
+# (plus asset_basics), so it is excluded from the parallel fan-out; it does NOT
+# depend on any other job and may run alongside them.
+CELL_BY_EVERYTHING_SOURCE_JOBS = ("ecephys_units", "pophys", "visual_learning")
+
+
 # Jobs that may run in parallel once asset_basics has completed.
-PARALLEL_JOBS = tuple(name for name in JOBS if name != "asset_basics")
+PARALLEL_JOBS = tuple(
+    name for name in JOBS if name not in ("asset_basics", "cell-by-everything")
+)
 
 
 def run_sync_job(job: str | None = None) -> None:
@@ -873,5 +945,7 @@ def update_all_tables(fast: bool = True, slow: bool = True) -> None:
             "video_frame_times",
             "curriculum",
             "time_to_qc",
+            # Last: projects the per-cell tables the jobs above have just built.
+            "cell-by-everything",
         ):
             run_sync_job(job)

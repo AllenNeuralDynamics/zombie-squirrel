@@ -77,6 +77,9 @@ NAMES = {
     "visual_coding_neuropixels_units": "platform_visual_coding_neuropixels_units",
     "swdb_dr_switch": "platform_swdb_dr_switch",
     "swdb_dr_switch_markers": "platform_swdb_dr_switch_markers",
+    "cell_index": "cell_index",
+    "cell_properties": "cell_properties",
+    "cell_genes": "cell_genes",
 }
 
 TABLE_REGISTRY: dict[str, Callable[[], Any]] = {}

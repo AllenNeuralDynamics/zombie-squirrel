@@ -307,3 +307,97 @@ def test_s3_scurry_non_404_head_error_raises(mock_boto3_client, mock_duckdb_quer
     mock_duckdb_query.side_effect = Exception("read failed")
     with pytest.raises(ClientError):
         S3Backend().read("some_table")
+
+
+# --- column sidecar writes ------------------------------------------------------
+#
+# For a partitioned table the <table>.json sidecar describes the table, not the
+# partition, so it must not be re-PUT once per partition: that is one wasted S3
+# round trip per partition in a job that is entirely round-trip bound.
+
+
+def _sidecar_backend():
+    """Return an S3Backend with a mocked S3 client."""
+    from unittest.mock import MagicMock
+
+    from biodata_cache.backend import S3Backend
+
+    with patch("boto3.client", return_value=MagicMock()):
+        backend = S3Backend()
+    return backend
+
+
+def _sidecar_puts(backend):
+    """Return the keys of every .json sidecar PUT issued so far."""
+    return [
+        call.kwargs["Key"]
+        for call in backend.s3_client.put_object.call_args_list
+        if call.kwargs["Key"].endswith(".json")
+    ]
+
+
+def test_repeated_partition_writes_put_the_sidecar_once():
+    backend = _sidecar_backend()
+    frame = pd.DataFrame({"a": [1], "b": [2]})
+    for value in ("p1", "p2", "p3"):
+        backend.write(f"platform_pophys/{value}", frame)
+
+    assert len(_sidecar_puts(backend)) == 1
+    # ...while every partition's parquet object is still written.
+    parquet_puts = [
+        call.kwargs["Key"]
+        for call in backend.s3_client.put_object.call_args_list
+        if call.kwargs["Key"].endswith(".pqt")
+    ]
+    assert len(parquet_puts) == 3
+
+
+def test_sidecar_is_rewritten_when_the_columns_change():
+    backend = _sidecar_backend()
+    backend.write("platform_ecephys_units/p1", pd.DataFrame({"a": [1]}))
+    backend.write("platform_ecephys_units/p2", pd.DataFrame({"a": [1], "extra": [2]}))
+    backend.write("platform_ecephys_units/p3", pd.DataFrame({"a": [1], "extra": [2]}))
+
+    # One write for each distinct column list, not one per partition.
+    assert len(_sidecar_puts(backend)) == 2
+
+
+def test_sidecars_for_different_tables_are_tracked_separately():
+    backend = _sidecar_backend()
+    frame = pd.DataFrame({"a": [1]})
+    backend.write("platform_pophys/p1", frame)
+    backend.write("platform_ecephys_units/p1", frame)
+
+    assert sorted(_sidecar_puts(backend)) == sorted(
+        [
+            f"data-asset-cache/bdc-v{BDC_VERSION}/platform_ecephys_units.json",
+            f"data-asset-cache/bdc-v{BDC_VERSION}/platform_pophys.json",
+        ]
+    )
+
+
+def test_a_failed_sidecar_put_is_retried_on_the_next_write():
+    backend = _sidecar_backend()
+    frame = pd.DataFrame({"a": [1]})
+
+    def _fail_on_json(**kwargs):
+        if kwargs["Key"].endswith(".json"):
+            raise RuntimeError("boom")
+
+    backend.s3_client.put_object.side_effect = _fail_on_json
+    with pytest.raises(RuntimeError):
+        backend.write("platform_pophys/p1", frame)
+
+    # The key must not stay marked as written, or the sidecar is lost for good.
+    backend.s3_client.put_object.side_effect = None
+    backend.write("platform_pophys/p2", frame)
+    assert len(_sidecar_puts(backend)) == 2
+
+
+def test_write_chunk_uses_the_same_sidecar_dedup():
+    backend = _sidecar_backend()
+    frame = pd.DataFrame({"a": [1]})
+    for chunk in range(3):
+        backend.write_chunk("platform_pophys/p1", frame, chunk)
+
+    assert len(_sidecar_puts(backend)) == 1

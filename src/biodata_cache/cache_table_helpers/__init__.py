@@ -3,6 +3,7 @@
 from biodata_cache.cache_table_helpers import (  # noqa: F401
     asset_basics,
     behavior_curriculum,
+    cell_by_everything,
     custom,
     metadata_core,
     metadata_upgrade,

@@ -3,6 +3,7 @@
 import io
 import json
 import logging
+import threading
 from abc import ABC, abstractmethod
 
 import boto3
@@ -32,6 +33,8 @@ HIVE_PARTITION_KEYS = {
     "platform_visual_learning_coreg": "subject_id",
     "platform_visual_coding_ophys": "asset_name",
     "platform_behavior-videos_frame-times": "asset_name",
+    "cell_properties": "asset_name",
+    "cell_genes": "subject_id",
 }
 # S3 error codes that mean the object genuinely does not exist (a legitimate empty
 # cache) as opposed to a read failure.
@@ -125,6 +128,45 @@ class S3Backend(Backend):
         """Initialize S3Backend with S3 client."""
         self.bucket = "allen-data-views"
         self.s3_client = boto3.client("s3")
+        # Column sidecars already written by this process, keyed by object key.
+        # See _put_columns_sidecar.
+        self._sidecar_columns: dict[str, tuple[str, ...]] = {}
+        self._sidecar_lock = threading.Lock()
+
+    def _put_columns_sidecar(self, json_key: str, data: pd.DataFrame) -> None:
+        """Write the ``<table>.json`` column sidecar, skipping an unchanged rewrite.
+
+        For a partitioned table this sidecar describes the *table*, not the
+        partition, so writing it inside every partition write meant one redundant
+        PUT of identical bytes per partition -- 5000+ of them for a table like
+        ``cell_properties`` or ``platform_pophys``, each an extra round trip in a
+        job that is entirely round-trip bound. Remembering what this process has
+        already written collapses that to one PUT per distinct column list.
+
+        A table whose partitions genuinely differ in columns (e.g.
+        ``platform_ecephys_units``, whose set varies by sorting-pipeline version)
+        still gets a write whenever the list changes, so the sidecar ends up
+        describing one real partition exactly as before -- previously it was
+        whichever partition happened to be written last, which was already
+        arbitrary.
+        """
+        columns = tuple(data.columns)
+        with self._sidecar_lock:
+            if self._sidecar_columns.get(json_key) == columns:
+                return
+            # Claim it before the PUT so concurrent writers do not duplicate it.
+            self._sidecar_columns[json_key] = columns
+        try:
+            self.s3_client.put_object(
+                Bucket=self.bucket,
+                Key=json_key,
+                Body=json.dumps({"columns": list(columns)}),
+            )
+        except Exception:
+            # Do not let a failed PUT leave the key marked as written.
+            with self._sidecar_lock:
+                self._sidecar_columns.pop(json_key, None)
+            raise
 
     def write(self, table_name: str, data: pd.DataFrame) -> None:
         """Store DataFrame as parquet file in S3."""
@@ -161,12 +203,7 @@ class S3Backend(Backend):
             ).to_json()
         )
 
-        metadata = {"columns": data.columns.tolist()}
-        self.s3_client.put_object(
-            Bucket=self.bucket,
-            Key=json_key,
-            Body=json.dumps(metadata),
-        )
+        self._put_columns_sidecar(json_key, data)
 
     def read(self, table_name: str | list[str]) -> pd.DataFrame:
         """Fetch DataFrame from S3 parquet file(s).
@@ -231,10 +268,7 @@ class S3Backend(Backend):
                 backend="S3Backend", table=table_name, message=f"Stored chunk {chunk_idx} to s3://{self.bucket}/{s3_key}"
             ).to_json()
         )
-        metadata = {"columns": data.columns.tolist()}
-        self.s3_client.put_object(
-            Bucket=self.bucket, Key=json_key, Body=json.dumps(metadata)
-        )
+        self._put_columns_sidecar(json_key, data)
 
     def _cache_object_exists(self, table_name: str) -> bool:
         """Return True if the cache object(s) for a table exist in S3.
