@@ -13,10 +13,9 @@ An asset may contain several NWB files (one per experiment/recording); each file
 with a ``/units`` group contributes rows, and files without one are skipped.
 """
 
-import json
+import gc
 import logging
 import re
-import gc
 from concurrent.futures import ThreadPoolExecutor
 
 import boto3
@@ -26,6 +25,14 @@ from botocore.config import Config
 
 import biodata_cache.registry as registry
 from biodata_cache.cache_table_helpers.asset_basics import asset_basics
+from biodata_cache.cache_table_helpers.shared.nwb_zarr import (
+    NWB_DIR_SUFFIXES,
+    download_zarr_store,
+    find_nwb_prefixes,
+    list_nwb_dirs,
+    load_zmetadata,
+    parse_s3,
+)
 from biodata_cache.models import Column
 from biodata_cache.utils import CacheLogMessage, setup_logging
 
@@ -40,7 +47,6 @@ _NON_SCALAR_ARRAYS = {
     "waveform_sd",
 }
 _FRONT_COLUMNS = ["experiment", "device_name", "unit_name"]
-_S3_URI_RE = re.compile(r"^s3://([^/]+)/(.+)$")
 _EXPERIMENT_RE = re.compile(r"(experiment\d+_recording\d+)")
 _MAX_WORKERS = 32
 
@@ -56,41 +62,10 @@ def _log(message: str) -> None:
     )
 
 
-def _parse_s3(location: str) -> tuple[str, str]:
-    """Split an ``s3://bucket/key`` URI into ``(bucket, key)`` with no trailing slash."""
-    match = _S3_URI_RE.match(location)
-    if match is None:
-        raise ValueError(f"Not an S3 URI: {location}")
-    return match.group(1), match.group(2).rstrip("/")
-
-
-_NWB_DIR_SUFFIXES = (".nwb.zarr", ".nwb")
-
-
-def _list_nwb_dirs(client, bucket: str, prefix: str) -> list[str]:
-    """Return common-prefix directories under ``prefix`` that look like an NWB store."""
-    resp = client.list_objects_v2(Bucket=bucket, Prefix=prefix, Delimiter="/")
-    dirs = []
-    for entry in resp.get("CommonPrefixes", []):
-        candidate = entry["Prefix"].rstrip("/")
-        if candidate.endswith(_NWB_DIR_SUFFIXES):
-            dirs.append(candidate)
-    return dirs
-
-
-def _find_nwb_prefixes(client, bucket: str, key: str) -> list[str]:
-    """Return the S3 key prefixes of every NWB store belonging to one asset.
-
-    Checks the conventional ``<key>/nwb/*.nwb/`` layout used by sorted ecephys
-    derived assets first. Falls back to the asset root itself for the flatter
-    layout used by directly-exported NWB assets, where a single
-    ``<key>/<name>.nwb.zarr/`` store sits at the asset root with no ``nwb/``
-    subfolder.
-    """
-    prefixes = _list_nwb_dirs(client, bucket, f"{key}/nwb/")
-    if prefixes:
-        return prefixes
-    return _list_nwb_dirs(client, bucket, f"{key}/")
+_parse_s3 = parse_s3
+_list_nwb_dirs = list_nwb_dirs
+_find_nwb_prefixes = find_nwb_prefixes
+_NWB_DIR_SUFFIXES = NWB_DIR_SUFFIXES
 
 
 def _experiment_name(nwb_prefix: str) -> str:
@@ -140,21 +115,12 @@ def _load_units_metadata(client, bucket: str, nwb_prefix: str) -> tuple[bytes, d
     NWB files without sorted units (video/pose recordings, or per-experiment
     recordings without a sorting) return None so they can be skipped cheaply.
     """
-    body = client.get_object(Bucket=bucket, Key=f"{nwb_prefix}/.zmetadata")["Body"].read()
-    # An aborted/interrupted zarr write can leave a present-but-empty or truncated
-    # .zmetadata (same corruption class as the zero-byte chunks handled elsewhere).
-    # Skip such files cheaply instead of crashing the whole asset on json.loads.
-    if len(body) == 0:
-        _log(f"Skipping empty .zmetadata under {nwb_prefix}")
-        return None
-    try:
-        metadata = json.loads(body).get("metadata", {})
-    except json.JSONDecodeError:
-        _log(f"Skipping malformed .zmetadata under {nwb_prefix}")
-        return None
-    if f"{_UNITS_GROUP}/id/.zarray" not in metadata and f"{_UNITS_GROUP}/unit_name/.zarray" not in metadata:
-        return None
-    return body, metadata
+    return load_zmetadata(
+        client,
+        bucket,
+        nwb_prefix,
+        required_any_paths=(f"{_UNITS_GROUP}/id/.zarray", f"{_UNITS_GROUP}/unit_name/.zarray"),
+    )
 
 
 def _download_units_store(client, bucket: str, nwb_prefix: str, zmetadata: bytes, arrays: list[str]) -> dict:
@@ -164,23 +130,14 @@ def _download_units_store(client, bucket: str, nwb_prefix: str, zmetadata: bytes
     groups are fetched. Returns an in-memory zarr store dict keyed by NWB-relative
     paths.
     """
-    keys = []
-    paginator = client.get_paginator("list_objects_v2")
-    for array in arrays:
-        for page in paginator.paginate(Bucket=bucket, Prefix=f"{nwb_prefix}/{_UNITS_GROUP}/{array}/"):
-            for obj in page.get("Contents", []):
-                keys.append(obj["Key"])
-
-    def _fetch(s3_key: str) -> tuple[str, bytes]:
-        """Download one object and return its NWB-relative key with bytes."""
-        body = client.get_object(Bucket=bucket, Key=s3_key)["Body"].read()
-        return s3_key[len(nwb_prefix) + 1 :], body
-
-    store = {".zmetadata": zmetadata}
-    with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
-        for rel_key, body in executor.map(_fetch, keys):
-            store[rel_key] = body
-    return store
+    return download_zarr_store(
+        client,
+        bucket,
+        nwb_prefix,
+        zmetadata,
+        [f"{_UNITS_GROUP}/{array}" for array in arrays],
+        max_workers=_MAX_WORKERS,
+    )
 
 
 def _open_units_group(client, bucket: str, nwb_prefix: str) -> tuple[object, list[str], dict, bytes] | None:
@@ -353,10 +310,7 @@ def _fetch_asset_ecephys_units(asset_name: str, location: str | None = None) -> 
             del units
             if session_df.empty:
                 continue
-            if (
-                "extremum_channel_index" in session_df.columns
-                and f"{_UNITS_GROUP}/waveform_mean/.zarray" in metadata
-            ):
+            if "extremum_channel_index" in session_df.columns and f"{_UNITS_GROUP}/waveform_mean/.zarray" in metadata:
                 waveforms = _extremum_waveforms(
                     client,
                     bucket,
@@ -373,8 +327,7 @@ def _fetch_asset_ecephys_units(asset_name: str, location: str | None = None) -> 
             gc.collect()
         except Exception as exc:
             _log(
-                f"Failed to read units from {nwb_prefix} for asset {asset_name}, "
-                f"skipping: {type(exc).__name__}: {exc}"
+                f"Failed to read units from {nwb_prefix} for asset {asset_name}, skipping: {type(exc).__name__}: {exc}"
             )
             gc.collect()
             continue
@@ -445,9 +398,7 @@ def platform_ecephys_units(
 
     df = registry.BACKEND.read(cache_key)
     if df.empty:
-        raise ValueError(
-            f"Cache is empty for asset {asset_name}. Use force_update=True to fetch data from S3."
-        )
+        raise ValueError(f"Cache is empty for asset {asset_name}. Use force_update=True to fetch data from S3.")
 
     return df
 
@@ -461,7 +412,10 @@ def platform_ecephys_units_columns() -> list[Column]:
     """
     return [
         Column(name="experiment", description="Source NWB recording tag (e.g. 'experiment1_recording1')"),
-        Column(name="device_name", description="Probe the unit was recorded on (e.g. 'Probe A'); joinable with platform_ecephys_spikes"),
+        Column(
+            name="device_name",
+            description="Probe the unit was recorded on (e.g. 'Probe A'); joinable with platform_ecephys_spikes",
+        ),
         Column(name="unit_name", description="Unit identifier (UUID); joinable with platform_ecephys_spikes"),
         Column(name="id", description="NWB units-table row id"),
         Column(name="ks_unit_id", description="Kilosort unit id"),
@@ -475,7 +429,9 @@ def platform_ecephys_units_columns() -> list[Column]:
         Column(name="presence_ratio", description="Fraction of the recording in which the unit is active"),
         Column(name="amplitude", description="Unit spike amplitude"),
         Column(name="amplitude_median", description="Median spike amplitude"),
-        Column(name="amplitude_cutoff", description="Estimated fraction of missed spikes from the amplitude distribution"),
+        Column(
+            name="amplitude_cutoff", description="Estimated fraction of missed spikes from the amplitude distribution"
+        ),
         Column(name="snr", description="Signal-to-noise ratio of the unit"),
         Column(name="isi_violations_ratio", description="Inter-spike-interval violation ratio (contamination proxy)"),
         Column(name="isi_violations_count", description="Number of inter-spike-interval violations"),
@@ -510,5 +466,8 @@ def platform_ecephys_units_columns() -> list[Column]:
         Column(name="exp_decay", description="Exponential decay constant of the waveform amplitude over channels"),
         Column(name="num_positive_peaks", description="Number of positive peaks in the waveform"),
         Column(name="num_negative_peaks", description="Number of negative peaks in the waveform"),
-        Column(name="waveform", description="Extremum-channel mean waveform, a float32 vector of length num_samples (volts)"),
+        Column(
+            name="waveform",
+            description="Extremum-channel mean waveform, a float32 vector of length num_samples (volts)",
+        ),
     ]

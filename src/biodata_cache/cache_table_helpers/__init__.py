@@ -1,4 +1,4 @@
-"""Acorns module: individual data fetching functions."""
+"""Cache-table helper modules and their registrations."""
 
 from biodata_cache.cache_table_helpers import (  # noqa: F401
     asset_basics,
@@ -18,7 +18,6 @@ from biodata_cache.cache_table_helpers import (  # noqa: F401
     platform_pophys,
     platform_qc,
     platform_smartspim,
-    platform_swdb,
     platform_visual_learning,
     qc,
     raw_to_derived,
@@ -28,4 +27,9 @@ from biodata_cache.cache_table_helpers import (  # noqa: F401
     unique_genotypes,
     unique_project_names,
     unique_subject_ids,
+)
+from biodata_cache.cache_table_helpers.manual.swdb import (  # noqa: F401
+    dr_switch,
+    public_collections,
+    visual_coding_units,
 )

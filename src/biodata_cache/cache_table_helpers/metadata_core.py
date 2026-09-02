@@ -64,7 +64,7 @@ def metadata_core(force_update: bool = False) -> pd.DataFrame:
         )
 
         keep_ids = []
-        cached_last_modified = dict(zip(df["_id"], df["_last_modified"]))
+        cached_last_modified = dict(zip(df["_id"], df["_last_modified"], strict=False))
         for record in record_ids:
             if cached_last_modified.get(record["_id"]) != record["_last_modified"]:
                 keep_ids.append(record["_id"])

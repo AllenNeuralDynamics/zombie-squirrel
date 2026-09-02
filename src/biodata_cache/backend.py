@@ -12,34 +12,17 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from botocore.exceptions import ClientError
 
+from biodata_cache.table_specs import PARTITION_KEYS
 from biodata_cache.utils import BDC_VERSION, CacheLogMessage, duckdb_query
 
 _CACHE_ROOT = "data-asset-cache"
 _VERSION_FOLDER = f"bdc-v{BDC_VERSION}"
 
-HIVE_PARTITION_KEYS = {
-    "qc": "subject_id",
-    "qc_tag_status": "subject_id",
-    "platform_qc": "platform",
-    "platform_dynamic_foraging_trials": "subject_id",
-    "platform_dynamic_foraging_events": "subject_id",
-    "platform_fib_traces": "asset_name",
-    "platform_fib_operations": "asset_name",
-    "platform_df_operations": "asset_name",
-    "platform_ecephys_spikes": "asset_name",
-    "platform_ecephys_units": "asset_name",
-    "platform_pophys": "asset_name",
-    "platform_visual_learning_cell_gene": "subject_id",
-    "platform_visual_learning_coreg": "subject_id",
-    "platform_visual_coding_ophys": "asset_name",
-    "platform_behavior-videos_frame-times": "asset_name",
-    "cell_properties": "asset_name",
-    "cell_genes": "subject_id",
-}
+# Compatibility alias for callers that imported the old backend constant.
+HIVE_PARTITION_KEYS = PARTITION_KEYS
 # S3 error codes that mean the object genuinely does not exist (a legitimate empty
 # cache) as opposed to a read failure.
 _NOT_FOUND_CODES = {"404", "NoSuchKey", "NotFound"}
-
 
 
 class Backend(ABC):
@@ -265,7 +248,9 @@ class S3Backend(Backend):
         self.s3_client.put_object(Bucket=self.bucket, Key=s3_key, Body=parquet_buffer.getvalue())
         logging.info(
             CacheLogMessage(
-                backend="S3Backend", table=table_name, message=f"Stored chunk {chunk_idx} to s3://{self.bucket}/{s3_key}"
+                backend="S3Backend",
+                table=table_name,
+                message=f"Stored chunk {chunk_idx} to s3://{self.bucket}/{s3_key}",
             ).to_json()
         )
         self._put_columns_sidecar(json_key, data)
@@ -335,7 +320,6 @@ class S3Backend(Backend):
                 ).to_json()
             )
             raise
-
 
     def get_location(self, table_name: str, partitioned: bool = False) -> str:
         """Return the S3 URI for a given table."""
@@ -598,9 +582,7 @@ class MemoryBackend(Backend):
     def write_chunk(self, table_name: str, data: pd.DataFrame, chunk_idx: int) -> None:
         """Append one chunk to the in-memory store for a partitioned table."""
         existing = self._store.get(table_name, pd.DataFrame())
-        self._store[table_name] = (
-            pd.concat([existing, data], ignore_index=True) if not existing.empty else data.copy()
-        )
+        self._store[table_name] = pd.concat([existing, data], ignore_index=True) if not existing.empty else data.copy()
 
     def _read_multiple(self, table_names: list[str]) -> pd.DataFrame:
         """Fetch and merge multiple tables from memory."""

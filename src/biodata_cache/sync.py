@@ -11,8 +11,8 @@ all remaining jobs in parallel.
 Every job writes its own per-table registry fragment (``cache_registry/<name>.json``)
 as soon as it finishes, rather than one process writing the whole registry at the
 end. Parallel jobs therefore never contend on a single JSON object. The
-``asset_basics`` job additionally resets the fragment directory and registers the
-version folder in ``cache_versions.json`` before any other job runs.
+``asset_basics`` job additionally registers the version folder in
+``cache_versions.json`` before any other job runs.
 
 See ``PIPELINE.md`` for the capsule/pipeline layout and the version-bump procedure.
 """
@@ -21,67 +21,12 @@ import logging
 import os
 from collections.abc import Callable
 
-from .cache_table_helpers.asset_basics import asset_basics_columns
-from .cache_table_helpers.behavior_curriculum import behavior_curriculum_columns
-from .cache_table_helpers.cell_by_everything import (
-    build_cell_by_everything,
-    cell_genes_columns,
-    cell_index_columns,
-    cell_properties_columns,
-)
-from .cache_table_helpers.metadata_upgrade import metadata_upgrade_columns
-from .cache_table_helpers.platform_df import (
-    platform_dynamic_foraging_events_columns,
-    platform_dynamic_foraging_sessions_columns,
-    platform_dynamic_foraging_trials_columns,
-)
-from .cache_table_helpers.platform_df_operations import platform_df_operations_columns
-from .cache_table_helpers.platform_ecephys_spikes import platform_ecephys_spikes_columns
-from .cache_table_helpers.platform_ecephys_units import platform_ecephys_units_columns
-from .cache_table_helpers.platform_exaspim import platform_exaspim_columns
-from .cache_table_helpers.platform_fib import platform_fib_columns
-from .cache_table_helpers.platform_fib_operations import (
-    platform_fib_operations_columns,
-)
-from .cache_table_helpers.platform_fib_traces import platform_fib_traces_columns
-from .cache_table_helpers.platform_mouselight import platform_mouselight_columns
-from .cache_table_helpers.platform_pophys import platform_pophys_columns
-from .cache_table_helpers.platform_qc import PLATFORMS, platform_qc_columns
-from .cache_table_helpers.platform_smartspim import assets_smartspim_columns
-from .cache_table_helpers.platform_swdb import (
-    swdb_2025_bci_columns,
-    swdb_2025_v1dd_columns,
-    swdb_2026_bci_columns,
-    swdb_2026_dynamic_routing_columns,
-    swdb_2026_neuropixels_opto_columns,
-    swdb_2026_v1dd_columns,
-    swdb_2026_visual_coding_neuropixels_columns,
-    swdb_2026_visual_coding_ophys_columns,
-    swdb_2026_visual_learning_columns,
-)
-from .cache_table_helpers.platform_swdb_dr_switch import (
-    platform_swdb_dr_switch_columns,
-    platform_swdb_dr_switch_markers_columns,
-)
-from .cache_table_helpers.platform_video_frame_times import platform_video_frame_times_columns
-from .cache_table_helpers.platform_visual_coding_neuropixels_units import (
-    platform_visual_coding_neuropixels_units_columns,
-)
-from .cache_table_helpers.platform_visual_coding_ophys import platform_visual_coding_ophys_columns
-from .cache_table_helpers.platform_visual_learning import (
-    platform_visual_learning_cell_gene_columns,
-    platform_visual_learning_coreg_columns,
-)
-from .cache_table_helpers.qc import qc_columns
+from .cache_table_helpers.cell_by_everything import build_cell_by_everything
+from .cache_table_helpers.platform_qc import PLATFORMS
 from .cache_table_helpers.shared.cloudwatch_utils import build_all_operations
-from .cache_table_helpers.source_data import source_data_columns
-from .cache_table_helpers.storage_lens import storage_lens_columns
-from .cache_table_helpers.time_to_qc import time_to_qc_columns
-from .cache_table_helpers.unique_genotypes import unique_genotypes_columns
-from .cache_table_helpers.unique_project_names import unique_project_names_columns
-from .cache_table_helpers.unique_subject_ids import unique_subject_ids_columns
-from .models import CacheTable, CacheTableType
+from .models import CacheTable
 from .registry import BACKEND, NAMES, TABLE_REGISTRY
+from .table_specs import TABLE_SPECS, table_specs_for_job
 
 # Environment variable read by a capsule to decide which job it runs.
 SYNC_JOB_ENV = "BIODATA_CACHE_SYNC_JOB"
@@ -95,381 +40,8 @@ SYNC_JOB_ENV = "BIODATA_CACHE_SYNC_JOB"
 
 
 def _entry_builders() -> dict[str, Callable[[], CacheTable]]:
-    """Return the per-table registry-entry factories, keyed by table name."""
-    return {
-        NAMES["upn"]: lambda: CacheTable(
-            name=NAMES["upn"],
-            description="Unique project names across all assets",
-            location=BACKEND.get_location(NAMES["upn"]),
-            partitioned=False,
-            type=CacheTableType.metadata,
-            columns=unique_project_names_columns(),
-        ),
-        NAMES["usi"]: lambda: CacheTable(
-            name=NAMES["usi"],
-            description="Unique subject_ids across all assets",
-            location=BACKEND.get_location(NAMES["usi"]),
-            partitioned=False,
-            type=CacheTableType.metadata,
-            columns=unique_subject_ids_columns(),
-        ),
-        NAMES["ugt"]: lambda: CacheTable(
-            name=NAMES["ugt"],
-            description="Unique genotypes across all assets where subject.subject_details.genotype is present",
-            location=BACKEND.get_location(NAMES["ugt"]),
-            partitioned=False,
-            type=CacheTableType.metadata,
-            columns=unique_genotypes_columns(),
-        ),
-        NAMES["basics"]: lambda: CacheTable(
-            name=NAMES["basics"],
-            description="Commonly used asset metadata, one row per data asset",
-            location=BACKEND.get_location(NAMES["basics"]),
-            partitioned=False,
-            type=CacheTableType.metadata,
-            columns=asset_basics_columns(),
-        ),
-        NAMES["d2r"]: lambda: CacheTable(
-            name=NAMES["d2r"],
-            description="Mapping from derived asset names to their source raw asset names",
-            location=BACKEND.get_location(NAMES["d2r"]),
-            partitioned=False,
-            type=CacheTableType.metadata,
-            columns=source_data_columns(),
-        ),
-        NAMES["qc"]: lambda: CacheTable(
-            name=NAMES["qc"],
-            description="Quality control table with one row per QC metric, partitioned by subject_id",
-            location=BACKEND.get_location("qc", partitioned=True),
-            partitioned=True,
-            partition_key="subject_id",
-            type=CacheTableType.asset,
-            columns=qc_columns(),
-        ),
-        NAMES["smartspim"]: lambda: CacheTable(
-            name=NAMES["smartspim"],
-            description="SmartSPIM assets including processing status and neuroglancer links",
-            location=BACKEND.get_location(NAMES["smartspim"]),
-            partitioned=False,
-            type=CacheTableType.metadata,
-            columns=assets_smartspim_columns(),
-        ),
-        NAMES["exaspim"]: lambda: CacheTable(
-            name=NAMES["exaspim"],
-            description="ExaSPIM assets including processing status and neuroglancer links",
-            location=BACKEND.get_location(NAMES["exaspim"]),
-            partitioned=False,
-            type=CacheTableType.metadata,
-            columns=platform_exaspim_columns(),
-        ),
-        NAMES["upgrade"]: lambda: CacheTable(
-            name=NAMES["upgrade"],
-            description="Metadata upgrade status for each asset across versions",
-            location=BACKEND.get_location(NAMES["upgrade"]),
-            partitioned=False,
-            type=CacheTableType.metadata,
-            columns=metadata_upgrade_columns(),
-        ),
-        NAMES["fib"]: lambda: CacheTable(
-            name=NAMES["fib"],
-            description="Fiber photometry assets with per-fiber targeted structure and intended channel measurement",
-            location=BACKEND.get_location(NAMES["fib"]),
-            partitioned=False,
-            type=CacheTableType.metadata,
-            columns=platform_fib_columns(),
-        ),
-        NAMES["fib_traces"]: lambda: CacheTable(
-            name=NAMES["fib_traces"],
-            description="Processed fiber photometry dF/F traces (one row per sample), partitioned by asset_name",
-            location=BACKEND.get_location("platform_fib_traces", partitioned=True),
-            partitioned=True,
-            partition_key="asset_name",
-            type=CacheTableType.platform,
-            columns=platform_fib_traces_columns(),
-        ),
-        NAMES["fib_operations"]: lambda: CacheTable(
-            name=NAMES["fib_operations"],
-            description="Fiber photometry pipeline processing events (one row per lifecycle event), partitioned by asset_name",
-            location=BACKEND.get_location("platform_fib_operations", partitioned=True),
-            partitioned=True,
-            partition_key="asset_name",
-            type=CacheTableType.platform,
-            columns=platform_fib_operations_columns(),
-        ),
-        NAMES["df_operations"]: lambda: CacheTable(
-            name=NAMES["df_operations"],
-            description="Dynamic foraging pipeline processing events (one row per lifecycle event), partitioned by asset_name",
-            location=BACKEND.get_location("platform_df_operations", partitioned=True),
-            partitioned=True,
-            partition_key="asset_name",
-            type=CacheTableType.platform,
-            columns=platform_df_operations_columns(),
-        ),
-        NAMES["ecephys_spikes"]: lambda: CacheTable(
-            name=NAMES["ecephys_spikes"],
-            description="Sorted ecephys spike times (one row per spike), partitioned by asset_name",
-            location=BACKEND.get_location("platform_ecephys_spikes", partitioned=True),
-            partitioned=True,
-            partition_key="asset_name",
-            type=CacheTableType.platform,
-            columns=platform_ecephys_spikes_columns(),
-        ),
-        NAMES["ecephys_units"]: lambda: CacheTable(
-            name=NAMES["ecephys_units"],
-            description="Sorted ecephys units with quality/waveform metrics (one row per unit), partitioned by asset_name",
-            location=BACKEND.get_location("platform_ecephys_units", partitioned=True),
-            partitioned=True,
-            partition_key="asset_name",
-            type=CacheTableType.platform,
-            columns=platform_ecephys_units_columns(),
-        ),
-        NAMES["cell_index"]: lambda: CacheTable(
-            name=NAMES["cell_index"],
-            description=(
-                "One row per cell across every data asset: identity and provenance only "
-                "(asset, subject, acquisition, modality, probe/plane, source unit/ROI id). "
-                "Join cell_key to cell_properties for measurements and cell_genes for transcriptomics."
-            ),
-            location=BACKEND.get_location(NAMES["cell_index"]),
-            partitioned=False,
-            type=CacheTableType.platform,
-            columns=cell_index_columns(),
-        ),
-        NAMES["cell_properties"]: lambda: CacheTable(
-            name=NAMES["cell_properties"],
-            description=(
-                "Per-cell properties (CCF location, mean rate, QC, cell type) keyed by cell_key, "
-                "one partition per asset_name. Deliberately wide and sparse: each cell carries only "
-                "the properties its modality and pipeline produce."
-            ),
-            location=BACKEND.get_location(NAMES["cell_properties"], partitioned=True),
-            partitioned=True,
-            partition_key="asset_name",
-            type=CacheTableType.platform,
-            columns=cell_properties_columns(),
-        ),
-        NAMES["cell_genes"]: lambda: CacheTable(
-            name=NAMES["cell_genes"],
-            description=(
-                "Transcriptomic genotyping for the few cells that have it, keyed by cell_key, "
-                "one partition per subject_id. Kept out of cell_properties because gene panels are "
-                "wide enough that sparsity stops being free in parquet."
-            ),
-            location=BACKEND.get_location(NAMES["cell_genes"], partitioned=True),
-            partitioned=True,
-            partition_key="subject_id",
-            type=CacheTableType.platform,
-            columns=cell_genes_columns(),
-        ),
-        NAMES["pophys"]: lambda: CacheTable(
-            name=NAMES["pophys"],
-            description="Population physiology (multiplane-ophys) ROI contours and metadata (one row per ROI), partitioned by asset_name",
-            location=BACKEND.get_location("platform_pophys", partitioned=True),
-            partitioned=True,
-            partition_key="asset_name",
-            type=CacheTableType.platform,
-            columns=platform_pophys_columns(),
-        ),
-        NAMES["visual_coding_ophys"]: lambda: CacheTable(
-            name=NAMES["visual_coding_ophys"],
-            description="Visual Coding Ophys sparse ROI contours and projection metadata, partitioned by asset_name",
-            location=BACKEND.get_location("platform_visual_coding_ophys", partitioned=True),
-            partitioned=True,
-            partition_key="asset_name",
-            type=CacheTableType.platform,
-            columns=platform_visual_coding_ophys_columns(),
-        ),
-        NAMES["visual_learning_cell_gene"]: lambda: CacheTable(
-            name=NAMES["visual_learning_cell_gene"],
-            description="Visual Learning HCR cell-by-gene counts and annotated cell types, partitioned by subject_id",
-            location=BACKEND.get_location("platform_visual_learning_cell_gene", partitioned=True),
-            partitioned=True,
-            partition_key="subject_id",
-            type=CacheTableType.platform,
-            columns=platform_visual_learning_cell_gene_columns(),
-        ),
-        NAMES["visual_learning_coreg"]: lambda: CacheTable(
-            name=NAMES["visual_learning_coreg"],
-            description="Visual Learning imaging ROI to HCR cell co-registration, partitioned by subject_id",
-            location=BACKEND.get_location("platform_visual_learning_coreg", partitioned=True),
-            partitioned=True,
-            partition_key="subject_id",
-            type=CacheTableType.platform,
-            columns=platform_visual_learning_coreg_columns(),
-        ),
-        NAMES["swdb_2025_bci"]: lambda: CacheTable(
-            name=NAMES["swdb_2025_bci"],
-            description="SWDB 2025 BCI single-neuron-stim session metadata (one row per curated derived asset)",
-            location=BACKEND.get_location(NAMES["swdb_2025_bci"]),
-            partitioned=False,
-            type=CacheTableType.platform,
-            columns=swdb_2025_bci_columns(),
-        ),
-        NAMES["swdb_2025_v1dd"]: lambda: CacheTable(
-            name=NAMES["swdb_2025_v1dd"],
-            description="SWDB 2025 V1 Deep Dive metadata (one row per asset)",
-            location=BACKEND.get_location(NAMES["swdb_2025_v1dd"]),
-            partitioned=False,
-            type=CacheTableType.platform,
-            columns=swdb_2025_v1dd_columns(),
-        ),
-        NAMES["swdb_2026_bci"]: lambda: CacheTable(
-            name=NAMES["swdb_2026_bci"],
-            description="SWDB 2026 public Code Ocean collection BCI data asset membership",
-            location=BACKEND.get_location(NAMES["swdb_2026_bci"]),
-            partitioned=False,
-            type=CacheTableType.platform,
-            columns=swdb_2026_bci_columns(),
-        ),
-        NAMES["swdb_2026_v1dd"]: lambda: CacheTable(
-            name=NAMES["swdb_2026_v1dd"],
-            description="SWDB 2026 public Code Ocean collection V1DD data asset membership",
-            location=BACKEND.get_location(NAMES["swdb_2026_v1dd"]),
-            partitioned=False,
-            type=CacheTableType.platform,
-            columns=swdb_2026_v1dd_columns(),
-        ),
-        NAMES["swdb_2026_visual_learning"]: lambda: CacheTable(
-            name=NAMES["swdb_2026_visual_learning"],
-            description="SWDB 2026 public Code Ocean collection Visual Learning data asset membership",
-            location=BACKEND.get_location(NAMES["swdb_2026_visual_learning"]),
-            partitioned=False,
-            type=CacheTableType.platform,
-            columns=swdb_2026_visual_learning_columns(),
-        ),
-        NAMES["swdb_2026_visual_coding_neuropixels"]: lambda: CacheTable(
-            name=NAMES["swdb_2026_visual_coding_neuropixels"],
-            description="SWDB 2026 public Code Ocean collection Visual Coding Neuropixels membership",
-            location=BACKEND.get_location(NAMES["swdb_2026_visual_coding_neuropixels"]),
-            partitioned=False,
-            type=CacheTableType.platform,
-            columns=swdb_2026_visual_coding_neuropixels_columns(),
-        ),
-        NAMES["swdb_2026_visual_coding_ophys"]: lambda: CacheTable(
-            name=NAMES["swdb_2026_visual_coding_ophys"],
-            description="SWDB 2026 public Code Ocean collection Visual Coding Ophys membership",
-            location=BACKEND.get_location(NAMES["swdb_2026_visual_coding_ophys"]),
-            partitioned=False,
-            type=CacheTableType.platform,
-            columns=swdb_2026_visual_coding_ophys_columns(),
-        ),
-        NAMES["swdb_2026_dynamic_routing"]: lambda: CacheTable(
-            name=NAMES["swdb_2026_dynamic_routing"],
-            description="SWDB 2026 public Code Ocean collection Dynamic Routing membership",
-            location=BACKEND.get_location(NAMES["swdb_2026_dynamic_routing"]),
-            partitioned=False,
-            type=CacheTableType.platform,
-            columns=swdb_2026_dynamic_routing_columns(),
-        ),
-        NAMES["swdb_2026_neuropixels_opto"]: lambda: CacheTable(
-            name=NAMES["swdb_2026_neuropixels_opto"],
-            description="SWDB 2026 public Code Ocean collection Neuropixels Opto membership",
-            location=BACKEND.get_location(NAMES["swdb_2026_neuropixels_opto"]),
-            partitioned=False,
-            type=CacheTableType.platform,
-            columns=swdb_2026_neuropixels_opto_columns(),
-        ),
-        NAMES["visual_coding_neuropixels_units"]: lambda: CacheTable(
-            name=NAMES["visual_coding_neuropixels_units"],
-            description="CCF unit locations for every Visual Coding Neuropixels session (one small unpartitioned table for the SWDB neuron-locations overview)",
-            location=BACKEND.get_location(NAMES["visual_coding_neuropixels_units"]),
-            partitioned=False,
-            type=CacheTableType.platform,
-            columns=platform_visual_coding_neuropixels_units_columns(),
-        ),
-        NAMES["swdb_dr_switch"]: lambda: CacheTable(
-            name=NAMES["swdb_dr_switch"],
-            description="Dynamic Routing block-switch firing rate per QC-passing unit, averaged across every switch of each direction (one small unpartitioned table for the SWDB neuron-locations replay)",
-            location=BACKEND.get_location(NAMES["swdb_dr_switch"]),
-            partitioned=False,
-            type=CacheTableType.platform,
-            columns=platform_swdb_dr_switch_columns(),
-        ),
-        NAMES["swdb_dr_switch_markers"]: lambda: CacheTable(
-            name=NAMES["swdb_dr_switch_markers"],
-            description="Representative trial-boundary times per Dynamic Routing block-switch direction (one small unpartitioned table for the SWDB neuron-locations replay's trial axis)",
-            location=BACKEND.get_location(NAMES["swdb_dr_switch_markers"]),
-            partitioned=False,
-            type=CacheTableType.platform,
-            columns=platform_swdb_dr_switch_markers_columns(),
-        ),
-        NAMES["video_frame_times"]: lambda: CacheTable(
-            name=NAMES["video_frame_times"],
-            description="Behavior-camera per-frame times from the camstim NI-DAQ sync file (one row per camera frame), partitioned by raw asset_name",
-            location=BACKEND.get_location(NAMES["video_frame_times"], partitioned=True),
-            partitioned=True,
-            partition_key="asset_name",
-            type=CacheTableType.platform,
-            columns=platform_video_frame_times_columns(),
-        ),
-        NAMES["df_sessions"]: lambda: CacheTable(
-            name=NAMES["df_sessions"],
-            description="Dynamic foraging session table (one row per session); mirrors upstream aind-dynamic-foraging-database",
-            location=BACKEND.get_location(NAMES["df_sessions"]),
-            partitioned=False,
-            type=CacheTableType.platform,
-            columns=platform_dynamic_foraging_sessions_columns(),
-        ),
-        NAMES["df_trials"]: lambda: CacheTable(
-            name=NAMES["df_trials"],
-            description="Dynamic foraging trial table (one row per trial), partitioned by subject_id; mirrors upstream aind-dynamic-foraging-database",
-            location=BACKEND.get_location(NAMES["df_trials"], partitioned=True),
-            partitioned=True,
-            partition_key="subject_id",
-            type=CacheTableType.platform,
-            columns=platform_dynamic_foraging_trials_columns(),
-        ),
-        NAMES["df_events"]: lambda: CacheTable(
-            name=NAMES["df_events"],
-            description="Dynamic foraging event table (one row per behavioral event), partitioned by subject_id; mirrors upstream aind-dynamic-foraging-database",
-            location=BACKEND.get_location(NAMES["df_events"], partitioned=True),
-            partitioned=True,
-            partition_key="subject_id",
-            type=CacheTableType.platform,
-            columns=platform_dynamic_foraging_events_columns(),
-        ),
-        NAMES["curriculum"]: lambda: CacheTable(
-            name=NAMES["curriculum"],
-            description="Behavior assets with curriculum name and stage from trainer_state.json",
-            location=BACKEND.get_location(NAMES["curriculum"]),
-            partitioned=False,
-            type=CacheTableType.asset,
-            columns=behavior_curriculum_columns(),
-        ),
-        NAMES["platform_qc"]: lambda: CacheTable(
-            name=NAMES["platform_qc"],
-            description="Tag-level QC statuses per platform, one row per asset/tag combination",
-            location=BACKEND.get_location("platform_qc", partitioned=True),
-            partitioned=True,
-            partition_key="platform",
-            type=CacheTableType.platform,
-            columns=platform_qc_columns(),
-        ),
-        NAMES["time_to_qc"]: lambda: CacheTable(
-            name=NAMES["time_to_qc"],
-            description="Time from processing completion to QC completion for derived assets",
-            location=BACKEND.get_location(NAMES["time_to_qc"]),
-            partitioned=False,
-            type=CacheTableType.metadata,
-            columns=time_to_qc_columns(),
-        ),
-        NAMES["mouselight"]: lambda: CacheTable(
-            name=NAMES["mouselight"],
-            description="Janelia MouseLight neuron list (one row per neuron) with label, soma region and tracing UUIDs",
-            location=BACKEND.get_location(NAMES["mouselight"]),
-            partitioned=False,
-            type=CacheTableType.platform,
-            columns=platform_mouselight_columns(),
-        ),
-        NAMES["storage_lens"]: lambda: CacheTable(
-            name=NAMES["storage_lens"],
-            description="Weekly S3 Storage Lens report (one row per prefix/storage class), sourced from RDS",
-            location=BACKEND.get_location(NAMES["storage_lens"]),
-            partitioned=False,
-            type=CacheTableType.metadata,
-            columns=storage_lens_columns(),
-        ),
-    }
+    """Return registry-entry factories derived from the table specifications."""
+    return {spec.name: (lambda spec=spec: spec.cache_table(BACKEND)) for spec in TABLE_SPECS}
 
 
 def publish_registry_fragment(name: str) -> None:
@@ -549,10 +121,12 @@ def _job_asset_basics() -> None:
 
 
 def _job_fast() -> None:
-    """Build all fast non-partitioned cache tables from DocDB and external databases."""
-    for key in ("upn", "usi", "ugt", "upgrade", "fib", "mouselight"):
-        TABLE_REGISTRY[NAMES[key]](force_update=True)
-        publish_registry_fragment(NAMES[key])
+    """Build all fast cache tables from DocDB and external databases."""
+    for spec in table_specs_for_job("fast"):
+        if spec.key == "platform_qc":
+            continue
+        TABLE_REGISTRY[spec.name](force_update=True)
+        publish_registry_fragment(spec.name)
     for platform in PLATFORMS:
         TABLE_REGISTRY[NAMES["platform_qc"]](platform=platform, force_update=True)
     publish_registry_fragment(NAMES["platform_qc"])
@@ -695,10 +269,7 @@ def _job_pophys() -> None:
     # discovered by platform_pophys.
     asset_names = _derived_asset_names(df_basics, "pophys")
     seen = set(asset_names)
-    asset_names.extend(
-        asset_name for asset_name in _derived_asset_names(df_basics, "ophys")
-        if asset_name not in seen
-    )
+    asset_names.extend(asset_name for asset_name in _derived_asset_names(df_basics, "ophys") if asset_name not in seen)
     visual_coding_names = set(_visual_coding_ophys_asset_names(df_basics))
     asset_names = [asset_name for asset_name in asset_names if asset_name not in visual_coding_names]
     raw_map = _raw_name_map(asset_names)
@@ -756,9 +327,7 @@ def _visual_coding_ophys_asset_names(df_basics) -> list:
         values = [values] if isinstance(values, str) else values
         return any("pophys" in str(value).lower() or "ophys" in str(value).lower() for value in values)
 
-    modality = df_basics["modalities"].apply(
-        has_ophys_modality
-    )
+    modality = df_basics["modalities"].apply(has_ophys_modality)
     return df_basics[project & modality & (df_basics["data_level"] == "derived")]["name"].dropna().unique().tolist()
 
 
@@ -828,22 +397,10 @@ def _job_video_frame_times() -> None:
 
 
 def _job_cell_by_everything() -> None:
-    """Build the three cell-by-everything tables.
-
-    Mostly a projection over per-cell tables that are already cached, so it
-    rebuilds all three tables wholesale rather than resuming per asset. Cells that
-    are only available from a one-off script-built table are read from NWB-Zarr
-    directly instead, so this job never depends on a table the pipeline does not
-    rebuild.
-
-    It must run after ``asset_basics`` and after every job in
-    ``CELL_BY_EVERYTHING_SOURCE_JOBS``, which is why it is not part of the
-    parallel fan-out. It has no other dependencies and can run concurrently with
-    the remaining parallel jobs.
-    """
+    """Build and publish the tables that join cell data across assets."""
     build_cell_by_everything()
-    for key in ("cell_index", "cell_properties", "cell_genes"):
-        publish_registry_fragment(NAMES[key])
+    for spec in table_specs_for_job("cell-by-everything"):
+        publish_registry_fragment(spec.name)
 
 
 def _job_curriculum() -> None:
@@ -858,8 +415,8 @@ def _job_time_to_qc() -> None:
     publish_registry_fragment(NAMES["time_to_qc"])
 
 
-# Registry of sync jobs. asset_basics must run before any other job (it resets the
-# registry, registers the version, and produces the table every other job reads).
+# Registry of sync jobs. asset_basics must run before any other job (it registers
+# the version and produces the tables every other job reads).
 JOBS: dict[str, Callable[[], None]] = {
     "asset_basics": _job_asset_basics,
     "fast": _job_fast,
@@ -881,16 +438,11 @@ JOBS: dict[str, Callable[[], None]] = {
     "time_to_qc": _job_time_to_qc,
 }
 
-# Jobs whose cached output cell-by-everything projects. It must run after these
-# (plus asset_basics), so it is excluded from the parallel fan-out; it does NOT
-# depend on any other job and may run alongside them.
+# Jobs whose outputs feed cell-by-everything must finish before that final job.
 CELL_BY_EVERYTHING_SOURCE_JOBS = ("ecephys_units", "pophys", "visual_learning")
 
-
 # Jobs that may run in parallel once asset_basics has completed.
-PARALLEL_JOBS = tuple(
-    name for name in JOBS if name not in ("asset_basics", "cell-by-everything")
-)
+PARALLEL_JOBS = tuple(name for name in JOBS if name not in ("asset_basics", "cell-by-everything"))
 
 
 def run_sync_job(job: str | None = None) -> None:
@@ -945,7 +497,6 @@ def update_all_tables(fast: bool = True, slow: bool = True) -> None:
             "video_frame_times",
             "curriculum",
             "time_to_qc",
-            # Last: projects the per-cell tables the jobs above have just built.
             "cell-by-everything",
         ):
             run_sync_job(job)

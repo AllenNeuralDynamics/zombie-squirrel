@@ -4,9 +4,9 @@ import logging
 import re
 import time
 
-from pydantic import BaseModel
-
+import pandas as pd
 import semver
+from pydantic import BaseModel
 
 from biodata_cache import __version__ as _BDC_FULL_VERSION
 
@@ -88,7 +88,6 @@ _S3_RETRY_BACKOFF = 2.0
 
 def duckdb_query(query: str) -> "pd.DataFrame":
     """Execute a DuckDB SQL query, retrying on S3 rate-limit (503 SlowDown) errors."""
-    import pandas as pd
     import duckdb
 
     for attempt in range(_S3_RETRY_ATTEMPTS):

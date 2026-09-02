@@ -12,10 +12,8 @@ group contributes rows, and files without one are skipped. Many ecephys derived
 assets (pose tracking, facemap, etc.) have no NWB at all and produce no rows.
 """
 
-import json
 import logging
 import re
-from concurrent.futures import ThreadPoolExecutor
 
 import boto3
 import numpy as np
@@ -24,12 +22,19 @@ from botocore.config import Config
 
 import biodata_cache.registry as registry
 from biodata_cache.cache_table_helpers.asset_basics import asset_basics
+from biodata_cache.cache_table_helpers.shared.nwb_zarr import (
+    NWB_DIR_SUFFIXES,
+    download_zarr_store,
+    find_nwb_prefixes,
+    list_nwb_dirs,
+    load_zmetadata,
+    parse_s3,
+)
 from biodata_cache.models import Column
 from biodata_cache.utils import CacheLogMessage, setup_logging
 
 _UNITS_GROUP = "units"
 _SPIKE_ARRAYS = ["spike_times", "spike_times_index", "unit_name", "unit_id", "device_name"]
-_S3_URI_RE = re.compile(r"^s3://([^/]+)/(.+)$")
 _EXPERIMENT_RE = re.compile(r"(experiment\d+_recording\d+)")
 _MAX_WORKERS = 32
 # Upper bound on the number of spikes materialized into a single DataFrame/parquet
@@ -49,41 +54,10 @@ def _log(message: str) -> None:
     )
 
 
-def _parse_s3(location: str) -> tuple[str, str]:
-    """Split an ``s3://bucket/key`` URI into ``(bucket, key)`` with no trailing slash."""
-    match = _S3_URI_RE.match(location)
-    if match is None:
-        raise ValueError(f"Not an S3 URI: {location}")
-    return match.group(1), match.group(2).rstrip("/")
-
-
-_NWB_DIR_SUFFIXES = (".nwb.zarr", ".nwb")
-
-
-def _list_nwb_dirs(client, bucket: str, prefix: str) -> list[str]:
-    """Return common-prefix directories under ``prefix`` that look like an NWB store."""
-    resp = client.list_objects_v2(Bucket=bucket, Prefix=prefix, Delimiter="/")
-    dirs = []
-    for entry in resp.get("CommonPrefixes", []):
-        candidate = entry["Prefix"].rstrip("/")
-        if candidate.endswith(_NWB_DIR_SUFFIXES):
-            dirs.append(candidate)
-    return dirs
-
-
-def _find_nwb_prefixes(client, bucket: str, key: str) -> list[str]:
-    """Return the S3 key prefixes of every NWB store belonging to one asset.
-
-    Checks the conventional ``<key>/nwb/*.nwb/`` layout used by sorted ecephys
-    derived assets first. Falls back to the asset root itself for the flatter
-    layout used by directly-exported NWB assets, where a single
-    ``<key>/<name>.nwb.zarr/`` store sits at the asset root with no ``nwb/``
-    subfolder.
-    """
-    prefixes = _list_nwb_dirs(client, bucket, f"{key}/nwb/")
-    if prefixes:
-        return prefixes
-    return _list_nwb_dirs(client, bucket, f"{key}/")
+_parse_s3 = parse_s3
+_list_nwb_dirs = list_nwb_dirs
+_find_nwb_prefixes = find_nwb_prefixes
+_NWB_DIR_SUFFIXES = NWB_DIR_SUFFIXES
 
 
 def _experiment_name(nwb_prefix: str) -> str:
@@ -105,21 +79,12 @@ def _load_units_metadata(client, bucket: str, nwb_prefix: str) -> tuple[bytes, d
     array; NWB files with no sorted units (video/pose recordings, or per-experiment
     recordings without a sorting) return None so they can be skipped cheaply.
     """
-    body = client.get_object(Bucket=bucket, Key=f"{nwb_prefix}/.zmetadata")["Body"].read()
-    # An aborted/interrupted zarr write can leave a present-but-empty or truncated
-    # .zmetadata (same corruption class as the zero-byte chunks handled below). Skip
-    # such files cheaply instead of crashing the whole asset on json.loads.
-    if len(body) == 0:
-        _log(f"Skipping empty .zmetadata under {nwb_prefix}")
-        return None
-    try:
-        metadata = json.loads(body).get("metadata", {})
-    except json.JSONDecodeError:
-        _log(f"Skipping malformed .zmetadata under {nwb_prefix}")
-        return None
-    if f"{_UNITS_GROUP}/spike_times/.zarray" not in metadata:
-        return None
-    return body, metadata
+    return load_zmetadata(
+        client,
+        bucket,
+        nwb_prefix,
+        required_paths=(f"{_UNITS_GROUP}/spike_times/.zarray",),
+    )
 
 
 def _download_units_store(client, bucket: str, nwb_prefix: str, zmetadata: bytes, arrays: list[str]) -> dict:
@@ -129,30 +94,15 @@ def _download_units_store(client, bucket: str, nwb_prefix: str, zmetadata: bytes
     groups are fetched (the large ``waveform_mean``/``waveform_sd`` cubes are never
     downloaded). Returns an in-memory zarr store dict keyed by NWB-relative paths.
     """
-    keys = []
-    paginator = client.get_paginator("list_objects_v2")
-    for array in arrays:
-        for page in paginator.paginate(Bucket=bucket, Prefix=f"{nwb_prefix}/{_UNITS_GROUP}/{array}/"):
-            for obj in page.get("Contents", []):
-                keys.append(obj["Key"])
-
-    def _fetch(s3_key: str) -> tuple[str, bytes]:
-        """Download one object and return its NWB-relative key with bytes."""
-        body = client.get_object(Bucket=bucket, Key=s3_key)["Body"].read()
-        return s3_key[len(nwb_prefix) + 1 :], body
-
-    store = {".zmetadata": zmetadata}
-    with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
-        for rel_key, body in executor.map(_fetch, keys):
-            # Some source assets contain zero-byte chunk objects (corrupt/aborted
-            # writes). zarr treats a present-but-empty chunk as valid compressed
-            # data and hands it to blosc, which raises "error during blosc
-            # decompression: 0". Omitting the key makes zarr fall back to the
-            # array fill value for that chunk instead of crashing the whole asset.
-            if len(body) == 0:
-                _log(f"Skipping zero-byte chunk {rel_key} under {nwb_prefix}")
-                continue
-            store[rel_key] = body
+    store = download_zarr_store(
+        client,
+        bucket,
+        nwb_prefix,
+        zmetadata,
+        [f"{_UNITS_GROUP}/{array}" for array in arrays],
+        max_workers=_MAX_WORKERS,
+        skip_empty=True,
+    )
     return store
 
 
@@ -293,9 +243,7 @@ def _fetch_asset_ecephys_spikes(asset_name: str, location: str | None = None) ->
             continue
         experiment = _experiment_name(nwb_prefix)
         for band_df in _extract_spikes(units, experiment):
-            band_df = band_df.sort_values(
-                ["device_name", "unit_name", "spike_time"]
-            ).reset_index(drop=True)
+            band_df = band_df.sort_values(["device_name", "unit_name", "spike_time"]).reset_index(drop=True)
             registry.BACKEND.write_chunk(cache_key, band_df, chunk_idx)
             chunk_idx += 1
             del band_df
@@ -355,9 +303,7 @@ def platform_ecephys_spikes(
 
     df = registry.BACKEND.read(cache_key)
     if df.empty:
-        raise ValueError(
-            f"Cache is empty for asset {asset_name}. Use force_update=True to fetch data from S3."
-        )
+        raise ValueError(f"Cache is empty for asset {asset_name}. Use force_update=True to fetch data from S3.")
 
     return df
 
@@ -366,7 +312,10 @@ def platform_ecephys_spikes_columns() -> list[Column]:
     """Return platform_ecephys_spikes cache table column definitions."""
     return [
         Column(name="experiment", description="Source NWB recording tag (e.g. 'experiment1_recording1')"),
-        Column(name="device_name", description="Probe the unit was recorded on (e.g. 'Probe A'); joinable with platform_ecephys_units"),
+        Column(
+            name="device_name",
+            description="Probe the unit was recorded on (e.g. 'Probe A'); joinable with platform_ecephys_units",
+        ),
         Column(name="unit_name", description="Unit identifier (UUID); joinable with platform_ecephys_units"),
         Column(name="spike_time", description="Spike timestamp in seconds on the acquisition clock"),
     ]

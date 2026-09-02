@@ -13,7 +13,7 @@ from biodata_cache.models import CacheRegistry, CacheTable, CacheTableType, Colu
 
 def _make_cache_table(**kwargs):
     defaults = {
-        "name": "test_acorn",
+        "name": "test_table",
         "description": "A test cache table",
         "location": "s3://bucket/path/file.pqt",
         "partitioned": False,
@@ -52,7 +52,7 @@ def test_all_types_count():
 
 def test_cache_table_basic_creation():
     cache_table = _make_cache_table()
-    assert cache_table.name == "test_acorn"
+    assert cache_table.name == "test_table"
     assert cache_table.location == "s3://bucket/path/file.pqt"
     assert cache_table.partitioned is False
     assert cache_table.partition_key is None

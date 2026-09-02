@@ -1,10 +1,8 @@
 # biodata-cache
 
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
-![Code Style](https://img.shields.io/badge/code%20style-black-black)
+[![Code Style](https://img.shields.io/badge/code%20style-ruff-black)](https://docs.astral.sh/ruff/)
 [![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079?logo=semantic-release)](https://github.com/semantic-release/semantic-release)
-![Interrogate](https://img.shields.io/badge/interrogate-42.6%25-red)
-![Coverage](https://img.shields.io/badge/coverage-22%25-red)
 ![Python](https://img.shields.io/badge/python->=3.10,<3.14-blue?logo=python)
 
 `biodata-cache` is a set of one-line functions that handle the entire process of caching and retrieving data (and metadata) from AIND data assets.
@@ -58,7 +56,7 @@ from biodata_cache import get_cache_versions
 versions = get_cache_versions()
 ```
 
-The per-version `cache_registry.json` lives at `s3://allen-data-views/data-asset-cache/bdc-v{version}/cache_registry.json`. The top-level index `s3://allen-data-views/data-asset-cache/cache_versions.json` lists all available version folders as a JSON array.
+Each version stores one registry fragment per table at `s3://allen-data-views/data-asset-cache/bdc-v{version}/cache_registry/<table>.json`. `get_cache_registry()` merges these fragments and still reads older monolithic registries. The top-level index `s3://allen-data-views/data-asset-cache/cache_versions.json` lists all available version folders.
 
 Hive-partitioned tables use `key=value` directory segments, enabling DuckDB queries like:
 
@@ -66,7 +64,7 @@ Hive-partitioned tables use `key=value` directory segments, enabling DuckDB quer
 import duckdb
 duckdb.query("""
     SELECT * FROM read_parquet(
-        's3://allen-data-views/data-asset-cache/bdc-v0.27.3/qc/data.pqt',
+        's3://allen-data-views/data-asset-cache/bdc-v0.41/qc/subject_id=123/data.pqt',
         hive_partitioning=true,
         union_by_name=true
     )
@@ -78,28 +76,18 @@ The `raw_to_derived` function is not a table stored in S3, instead it is used by
 
 ### Cells across every asset
 
-Three tables answer "what do we know about every single cell in every data
-asset?", joined on a stable `cell_key`:
+The cell tables use `cell_key` to join identity, measurements, and transcriptomic data:
 
-| Table | Grain | Partitioned by | Holds |
-|---|---|---|---|
-| `cell_index` | one row per cell | — | Identity and provenance: asset, subject, acquisition, modality, probe/plane, source unit/ROI id |
-| `cell_properties` | one row per cell | `asset_name` | CCF location, mean rate, QC, cell type, and other measurements — wide and deliberately sparse |
-| `cell_genes` | one row per genotyped cell | `subject_id` | Transcriptomic cluster labels and gene counts |
+| Table | Rows | Partition |
+|---|---|---|
+| `cell_index` | One row per cell | None |
+| `cell_properties` | Measurements for each cell | `asset_name` |
+| `cell_genes` | Genotyping results | `subject_id` |
 
-```python
-import duckdb
-from biodata_cache import cell_index, cell_properties
+The `cell-by-everything` sync job runs after `ecephys_units`, `pophys`, and
+`visual_learning`. It also reads Visual Coding Neuropixels NWB-Zarr data directly
+so it does not depend on manual SWDB tables.
 
-cells = cell_index()                                   # every cell, one small fetch
-props = cell_properties(asset_name=cells["asset_name"].iloc[0])
-```
-
-Most cells have only a handful of properties and NULL for the rest; that is the
-expected shape. A sync run skips `cell_properties` partitions that already exist,
-so pass `force_rewrite=True` if you need existing partitions rebuilt. `cell_key` is a hash of `(asset_name, container, cell_ref)`, so it
-is stable across cache rebuilds and safe to persist. `cell_ref` is the source
-NWB's own unit/ROI identifier, so any row can be traced back to its source.
 
 ### Custom cache table
 
@@ -118,11 +106,11 @@ retrieved_df = custom("my_data")
 ### Update all cache tables
 
 The cache is rebuilt on Code Ocean by a set of per-table sync jobs wired into a
-Nextflow pipeline (`asset_basics` first, then the rest in parallel, then `cell-by-everything`).
-Each job is
-selected by the `BIODATA_CACHE_SYNC_JOB` environment variable and writes its own
-registry fragment as it completes. See [PIPELINE.md](PIPELINE.md) for the job
-list, pipeline layout, and the version-bump/re-run procedure.
+Nextflow pipeline (`asset_basics` first, then the rest in parallel, followed by
+`cell-by-everything`). The `BIODATA_CACHE_SYNC_JOB` environment variable selects the job.
+The job writes its own
+registry fragment. See [PIPELINE.md](PIPELINE.md) for the job list, pipeline
+layout, and version procedure.
 
 To run a single job (as a capsule does):
 
@@ -130,6 +118,8 @@ To run a single job (as a capsule does):
 from biodata_cache.sync import run_sync_job
 run_sync_job()  # reads BIODATA_CACHE_SYNC_JOB, or pass e.g. run_sync_job("qc")
 ```
+
+From the repository, use `python scripts/run_sync.py <job>`.
 
 To rebuild everything in one local process (not used by the pipeline):
 

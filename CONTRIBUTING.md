@@ -2,34 +2,17 @@
 
 ### Linters and testing
 
-There are several libraries used to run linters, check documentation, and run tests.
-
-- Please test your changes using the **coverage** library, which will run the tests and log a coverage report:
+Run the checks from the repository root:
 
 ```bash
-coverage run -m unittest discover && coverage report
-```
-
-- Use **interrogate** to check that modules, methods, etc. have been documented thoroughly:
-
-```bash
+python -m pytest
+coverage run run_tests.py && coverage report
+ruff check .
+ruff format --check .
 interrogate .
 ```
 
-- Use **flake8** to check that code is up to standards (no unused imports, etc.):
-```bash
-flake8 .
-```
-
-- Use **black** to automatically format the code into PEP standards:
-```bash
-black .
-```
-
-- Use **isort** to automatically sort import statements:
-```bash
-isort .
-```
+The CI workflow runs the same checks with the repository's configured tools.
 
 ### Pull requests
 

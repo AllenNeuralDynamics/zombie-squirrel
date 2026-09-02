@@ -5,13 +5,12 @@ Usage:
     source .venv/bin/activate && python scripts/explore_storage_lens.py
 """
 
-import os
 from pathlib import Path
 
-from aind_data_access_api.secrets import get_secret
-from aind_data_access_api.rds_tables import RDSCredentials
-from sqlalchemy import create_engine, engine, text
 import pandas as pd
+from aind_data_access_api.rds_tables import RDSCredentials
+from aind_data_access_api.secrets import get_secret
+from sqlalchemy import create_engine, engine, text
 
 SECRET_NAME = "/aind/prod/rds/storage-lens-metrics/credentials/readonly"
 SSL_CERT = str(Path(__file__).parent.parent / "global-bundle.pem")

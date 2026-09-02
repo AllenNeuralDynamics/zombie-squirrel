@@ -1,4 +1,4 @@
-"""Unit tests for biodata_cache.trees module."""
+"""Unit tests for biodata_cache.backend module."""
 
 from unittest.mock import MagicMock, patch
 
@@ -21,12 +21,12 @@ def _not_found_error() -> ClientError:
 # --- Backend abstract class ---
 
 
-def test_tree_cannot_be_instantiated():
+def test_backend_cannot_be_instantiated():
     with pytest.raises(TypeError):
         Backend()
 
 
-def test_tree_subclass_must_implement_hide():
+def test_backend_subclass_must_implement_write():
     class IncompleteBackend(Backend):
         def read(self, table_name: str) -> pd.DataFrame:  # pragma: no cover
             return pd.DataFrame()
@@ -35,9 +35,9 @@ def test_tree_subclass_must_implement_hide():
         IncompleteBackend()
 
 
-def test_tree_subclass_must_implement_scurry():
+def test_backend_subclass_must_implement_read():
     class IncompleteBackend(Backend):
-        def hide(self, table_name: str, data: pd.DataFrame) -> None:  # pragma: no cover
+        def write(self, table_name: str, data: pd.DataFrame) -> None:  # pragma: no cover
             pass
 
     with pytest.raises(TypeError):
@@ -48,66 +48,66 @@ def test_tree_subclass_must_implement_scurry():
 
 
 @pytest.fixture
-def tree():
+def backend():
     return MemoryBackend()
 
 
-def test_hide_and_scurry_basic(tree):
+def test_write_and_read_basic(backend):
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": ["a", "b", "c"]})
-    tree.write("test_table", df)
-    pd.testing.assert_frame_equal(df, tree.read("test_table"))
+    backend.write("test_table", df)
+    pd.testing.assert_frame_equal(df, backend.read("test_table"))
 
 
-def test_scurry_empty_table(tree):
-    result = tree.read("nonexistent_table")
+def test_read_empty_table(backend):
+    result = backend.read("nonexistent_table")
     assert result.empty
     assert isinstance(result, pd.DataFrame)
 
 
-def test_hide_overwrites_existing(tree):
-    tree.write("table", pd.DataFrame({"col1": [1, 2, 3]}))
+def test_write_overwrites_existing(backend):
+    backend.write("table", pd.DataFrame({"col1": [1, 2, 3]}))
     df2 = pd.DataFrame({"col1": [4, 5, 6]})
-    tree.write("table", df2)
-    pd.testing.assert_frame_equal(df2, tree.read("table"))
+    backend.write("table", df2)
+    pd.testing.assert_frame_equal(df2, backend.read("table"))
 
 
-def test_multiple_tables(tree):
+def test_multiple_tables(backend):
     df1 = pd.DataFrame({"col1": [1, 2]})
     df2 = pd.DataFrame({"col2": ["a", "b"]})
-    tree.write("table1", df1)
-    tree.write("table2", df2)
-    pd.testing.assert_frame_equal(df1, tree.read("table1"))
-    pd.testing.assert_frame_equal(df2, tree.read("table2"))
+    backend.write("table1", df1)
+    backend.write("table2", df2)
+    pd.testing.assert_frame_equal(df1, backend.read("table1"))
+    pd.testing.assert_frame_equal(df2, backend.read("table2"))
 
 
-def test_hide_empty_dataframe(tree):
+def test_write_empty_dataframe(backend):
     df = pd.DataFrame()
-    tree.write("empty_table", df)
-    pd.testing.assert_frame_equal(df, tree.read("empty_table"))
+    backend.write("empty_table", df)
+    pd.testing.assert_frame_equal(df, backend.read("empty_table"))
 
 
-def test_scurry_multiple_tables(tree):
+def test_read_multiple_tables(backend):
     df1 = pd.DataFrame({"col1": [1, 2], "col2": ["a", "b"]})
     df2 = pd.DataFrame({"col1": [3, 4], "col2": ["c", "d"]})
-    tree.write("table1", df1)
-    tree.write("table2", df2)
-    result = tree.read(["table1", "table2"])
+    backend.write("table1", df1)
+    backend.write("table2", df2)
+    result = backend.read(["table1", "table2"])
     assert len(result) == 4
     assert "asset_name" in result.columns
     assert result[result["col1"] == 1].iloc[0]["asset_name"] == "table1"
     assert result[result["col1"] == 3].iloc[0]["asset_name"] == "table2"
 
 
-def test_scurry_multiple_with_missing_table(tree):
-    tree.write("table1", pd.DataFrame({"col1": [1, 2]}))
-    result = tree.read(["table1", "nonexistent"])
+def test_read_multiple_with_missing_table(backend):
+    backend.write("table1", pd.DataFrame({"col1": [1, 2]}))
+    result = backend.read(["table1", "nonexistent"])
     assert len(result) == 2
     assert "asset_name" in result.columns
     assert (result["asset_name"] == "table1").all()
 
 
-def test_scurry_multiple_all_missing(tree):
-    result = tree.read(["missing1", "missing2"])
+def test_read_multiple_all_missing(backend):
+    result = backend.read(["missing1", "missing2"])
     assert result.empty
     assert isinstance(result, pd.DataFrame)
 
@@ -126,7 +126,7 @@ def test_s3_backend_initialization(mock_boto3_client):
 
 
 @patch("biodata_cache.backend.boto3.client")
-def test_s3_hide(mock_boto3_client):
+def test_s3_write(mock_boto3_client):
     mock_s3_client = MagicMock()
     mock_boto3_client.return_value = mock_s3_client
     backend = S3Backend()
@@ -143,7 +143,7 @@ def test_s3_hide(mock_boto3_client):
 
 
 @patch("biodata_cache.backend.boto3.client")
-def test_s3_hide_qc_metadata(mock_boto3_client):
+def test_s3_write_qc_metadata(mock_boto3_client):
     mock_s3_client = MagicMock()
     mock_boto3_client.return_value = mock_s3_client
     backend = S3Backend()
@@ -159,7 +159,7 @@ def test_s3_hide_qc_metadata(mock_boto3_client):
 
 
 @patch("biodata_cache.backend.boto3.client")
-def test_s3_hide_platform_qc_metadata(mock_boto3_client):
+def test_s3_write_platform_qc_metadata(mock_boto3_client):
     mock_s3_client = MagicMock()
     mock_boto3_client.return_value = mock_s3_client
     backend = S3Backend()
@@ -172,7 +172,7 @@ def test_s3_hide_platform_qc_metadata(mock_boto3_client):
 
 @patch("biodata_cache.backend.duckdb_query")
 @patch("biodata_cache.backend.boto3.client")
-def test_s3_scurry(mock_boto3_client, mock_duckdb_query):
+def test_s3_read(mock_boto3_client, mock_duckdb_query):
     mock_boto3_client.return_value = MagicMock()
     expected_df = pd.DataFrame({"col1": [1, 2, 3]})
     mock_duckdb_query.return_value = expected_df
@@ -185,7 +185,7 @@ def test_s3_scurry(mock_boto3_client, mock_duckdb_query):
 
 @patch("biodata_cache.backend.duckdb_query")
 @patch("biodata_cache.backend.boto3.client")
-def test_s3_scurry_partitioned_table(mock_boto3_client, mock_duckdb_query):
+def test_s3_read_partitioned_table(mock_boto3_client, mock_duckdb_query):
     mock_boto3_client.return_value = MagicMock()
     expected_df = pd.DataFrame({"metric": ["a"]})
     mock_duckdb_query.return_value = expected_df
@@ -197,22 +197,22 @@ def test_s3_scurry_partitioned_table(mock_boto3_client, mock_duckdb_query):
 @patch("biodata_cache.backend.boto3.client")
 def test_s3_get_location_single_partition(mock_boto3_client):
     mock_boto3_client.return_value = MagicMock()
-    tree = S3Backend()
-    result = tree.get_location("qc/subject123")
+    backend = S3Backend()
+    result = backend.get_location("qc/subject123")
     assert result == f"s3://allen-data-views/data-asset-cache/{_VF}/qc/subject_id=subject123/data.pqt"
 
 
 @patch("biodata_cache.backend.boto3.client")
 def test_s3_get_location_platform_qc_partition(mock_boto3_client):
     mock_boto3_client.return_value = MagicMock()
-    tree = S3Backend()
-    result = tree.get_location("platform_qc/spim")
+    backend = S3Backend()
+    result = backend.get_location("platform_qc/spim")
     assert result == f"s3://allen-data-views/data-asset-cache/{_VF}/platform_qc/platform=spim/data.pqt"
 
 
 @patch("biodata_cache.backend.duckdb_query")
 @patch("biodata_cache.backend.boto3.client")
-def test_s3_scurry_missing_object_returns_empty(mock_boto3_client, mock_duckdb_query):
+def test_s3_read_missing_object_returns_empty(mock_boto3_client, mock_duckdb_query):
     mock_s3 = MagicMock()
     mock_s3.head_object.side_effect = _not_found_error()
     mock_boto3_client.return_value = mock_s3
@@ -224,7 +224,7 @@ def test_s3_scurry_missing_object_returns_empty(mock_boto3_client, mock_duckdb_q
 
 @patch("biodata_cache.backend.duckdb_query")
 @patch("biodata_cache.backend.boto3.client")
-def test_s3_scurry_read_error_raises(mock_boto3_client, mock_duckdb_query):
+def test_s3_read_read_error_raises(mock_boto3_client, mock_duckdb_query):
     mock_s3 = MagicMock()
     mock_s3.head_object.return_value = {"ContentLength": 1}
     mock_boto3_client.return_value = mock_s3
@@ -235,7 +235,7 @@ def test_s3_scurry_read_error_raises(mock_boto3_client, mock_duckdb_query):
 
 @patch("biodata_cache.backend.duckdb_query")
 @patch("biodata_cache.backend.boto3.client")
-def test_s3_scurry_multiple_tables(mock_boto3_client, mock_duckdb_query):
+def test_s3_read_multiple_tables(mock_boto3_client, mock_duckdb_query):
     mock_boto3_client.return_value = MagicMock()
     expected_df = pd.DataFrame(
         {"col1": [1, 2, 3, 4], "col2": ["a", "b", "c", "d"], "asset_name": ["table1", "table1", "table2", "table2"]}
@@ -252,7 +252,7 @@ def test_s3_scurry_multiple_tables(mock_boto3_client, mock_duckdb_query):
 
 @patch("biodata_cache.backend.duckdb_query")
 @patch("biodata_cache.backend.boto3.client")
-def test_s3_scurry_multiple_missing_returns_empty(mock_boto3_client, mock_duckdb_query):
+def test_s3_read_multiple_missing_returns_empty(mock_boto3_client, mock_duckdb_query):
     mock_s3 = MagicMock()
     mock_s3.head_object.side_effect = _not_found_error()
     mock_boto3_client.return_value = mock_s3
@@ -264,7 +264,7 @@ def test_s3_scurry_multiple_missing_returns_empty(mock_boto3_client, mock_duckdb
 
 @patch("biodata_cache.backend.duckdb_query")
 @patch("biodata_cache.backend.boto3.client")
-def test_s3_scurry_multiple_read_error_raises(mock_boto3_client, mock_duckdb_query):
+def test_s3_read_multiple_read_error_raises(mock_boto3_client, mock_duckdb_query):
     mock_s3 = MagicMock()
     mock_s3.head_object.return_value = {"ContentLength": 1}
     mock_boto3_client.return_value = mock_s3
@@ -275,7 +275,7 @@ def test_s3_scurry_multiple_read_error_raises(mock_boto3_client, mock_duckdb_que
 
 @patch("biodata_cache.backend.duckdb_query")
 @patch("biodata_cache.backend.boto3.client")
-def test_s3_scurry_partitioned_missing_returns_empty(mock_boto3_client, mock_duckdb_query):
+def test_s3_read_partitioned_missing_returns_empty(mock_boto3_client, mock_duckdb_query):
     mock_s3 = MagicMock()
     mock_s3.list_objects_v2.return_value = {"KeyCount": 0}
     mock_boto3_client.return_value = mock_s3
@@ -287,7 +287,7 @@ def test_s3_scurry_partitioned_missing_returns_empty(mock_boto3_client, mock_duc
 
 @patch("biodata_cache.backend.duckdb_query")
 @patch("biodata_cache.backend.boto3.client")
-def test_s3_scurry_partitioned_read_error_raises(mock_boto3_client, mock_duckdb_query):
+def test_s3_read_partitioned_read_error_raises(mock_boto3_client, mock_duckdb_query):
     mock_s3 = MagicMock()
     mock_s3.list_objects_v2.return_value = {"KeyCount": 1}
     mock_boto3_client.return_value = mock_s3
@@ -298,7 +298,7 @@ def test_s3_scurry_partitioned_read_error_raises(mock_boto3_client, mock_duckdb_
 
 @patch("biodata_cache.backend.duckdb_query")
 @patch("biodata_cache.backend.boto3.client")
-def test_s3_scurry_non_404_head_error_raises(mock_boto3_client, mock_duckdb_query):
+def test_s3_read_non_404_head_error_raises(mock_boto3_client, mock_duckdb_query):
     mock_s3 = MagicMock()
     mock_s3.head_object.side_effect = ClientError(
         {"Error": {"Code": "500", "Message": "Internal Error"}}, "HeadObject"

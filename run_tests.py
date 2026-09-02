@@ -1,12 +1,9 @@
 #!/usr/bin/env python
-"""Test runner that delegates to pytest."""
+"""Run the test suite."""
 
-import subprocess
 import sys
 
+import pytest
+
 if __name__ == "__main__":
-    result = subprocess.run(
-        [sys.executable, "-m", "pytest", "tests", "-v"],
-        check=False,
-    )
-    sys.exit(result.returncode)
+    sys.exit(pytest.main(["tests", "-v"]))

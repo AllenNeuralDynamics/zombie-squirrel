@@ -1,4 +1,4 @@
-"""Cache table registry: functions to fetch and cache data from MongoDB."""
+"""Cache table registry and backend setup."""
 
 import logging
 import os
@@ -9,6 +9,7 @@ from biodata_cache.backend import (
     MemoryBackend,
     S3Backend,
 )
+from biodata_cache.table_specs import NAMES, TABLE_SPECS_BY_NAME  # noqa: F401
 from biodata_cache.utils import CacheLogMessage
 
 # --- Backend setup ---------------------------------------------------
@@ -32,61 +33,15 @@ elif backend_type == "memory":  # pragma: no cover
 else:  # pragma: no cover
     raise ValueError(f"Unknown BIODATA_CACHE_BACKEND: {backend_type}")
 
-# --- Cache table registry and names -------------------------------------------
-
-NAMES = {
-    "upn": "unique_project_names",
-    "usi": "unique_subject_ids",
-    "ugt": "unique_genotypes",
-    "basics": "asset_basics",
-    "d2r": "source_data",
-    "r2d": "raw_to_derived",
-    "qc": "quality_control",
-    "smartspim": "platform_smartspim",
-    "exaspim": "platform_exaspim",
-    "upgrade": "metadata_upgrade",
-    "fib": "platform_fib",
-    "fib_traces": "platform_fib_traces",
-    "fib_operations": "platform_fib_operations",
-    "df_operations": "platform_df_operations",
-    "ecephys_spikes": "platform_ecephys_spikes",
-    "ecephys_units": "platform_ecephys_units",
-    "pophys": "platform_pophys",
-    "visual_coding_ophys": "platform_visual_coding_ophys",
-    "video_frame_times": "platform_behavior-videos_frame-times",
-    "core": "metadata_core",
-    "df_sessions": "platform_dynamic_foraging_sessions",
-    "df_trials": "platform_dynamic_foraging_trials",
-    "df_events": "platform_dynamic_foraging_events",
-    "curriculum": "behavior_curriculum",
-    "platform_qc": "platform_qc",
-    "time_to_qc": "time_to_qc",
-    "mouselight": "platform_mouselight",
-    "storage_lens": "storage_lens",
-    "swdb_2025_bci": "swdb_2025_bci",
-    "swdb_2025_v1dd": "swdb_2025_v1dd",
-    "swdb_2026_bci": "swdb_2026_bci",
-    "swdb_2026_v1dd": "swdb_2026_v1dd",
-    "swdb_2026_visual_learning": "swdb_2026_visual_learning",
-    "visual_learning_cell_gene": "platform_visual_learning_cell_gene",
-    "visual_learning_coreg": "platform_visual_learning_coreg",
-    "swdb_2026_visual_coding_neuropixels": "swdb_2026_visual_coding_neuropixels",
-    "swdb_2026_visual_coding_ophys": "swdb_2026_visual_coding_ophys",
-    "swdb_2026_dynamic_routing": "swdb_2026_dynamic_routing",
-    "swdb_2026_neuropixels_opto": "swdb_2026_neuropixels_opto",
-    "visual_coding_neuropixels_units": "platform_visual_coding_neuropixels_units",
-    "swdb_dr_switch": "platform_swdb_dr_switch",
-    "swdb_dr_switch_markers": "platform_swdb_dr_switch_markers",
-    "cell_index": "cell_index",
-    "cell_properties": "cell_properties",
-    "cell_genes": "cell_genes",
-}
+# --- Cache table registry ----------------------------------------------------
 
 TABLE_REGISTRY: dict[str, Callable[[], Any]] = {}
 
 
 def register_table(name: str):
     """Register cache table function with registry."""
+    if name not in TABLE_SPECS_BY_NAME:
+        raise KeyError(f"No TableSpec exists for registered table {name!r}")
 
     def decorator(func):
         """Register function in cache table registry."""

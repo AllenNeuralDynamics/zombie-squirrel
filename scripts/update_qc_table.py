@@ -1,48 +1,11 @@
-"""Update the QC cache table for all subjects without updating other tables."""
+"""Run the QC sync job."""
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
-from biodata_cache.registry import NAMES, TABLE_REGISTRY
+from biodata_cache.sync import run_sync_job
 
 
-def _check_subject_needs_update(subject_id: str, qc_table_fn) -> tuple[str, bool]:
-    """Check if a subject needs QC update."""
-    try:
-        df_qc = qc_table_fn(subject_id=subject_id, force_update=False)
-        if df_qc.empty or "status" not in df_qc.columns:
-            return subject_id, True
-        return subject_id, False
-    except Exception:
-        return subject_id, True
-
-
-def main():
-    """Update QC cache table for all subjects."""
-    df_basics = TABLE_REGISTRY[NAMES["basics"]](force_update=False)
-    subject_ids = df_basics["subject_id"].dropna().unique()
-    print(f"Found {len(subject_ids)} subjects. Filtering for subjects without status column...")
-
-    qc_table_fn = TABLE_REGISTRY[NAMES["qc"]]
-
-    print(f"Fetching QC data for {len(subject_ids)} subjects...")
-
-    qc_table_fn = TABLE_REGISTRY[NAMES["qc"]]
-    try:
-        with ThreadPoolExecutor() as executor:
-            futures = {
-                executor.submit(qc_table_fn, subject_id=subject_id, force_update=True): subject_id
-                for subject_id in subject_ids
-            }
-            for i, future in enumerate(as_completed(futures), 1):
-                subject_id = futures[future]
-                future.result()
-                print(f"[{i}/{len(subject_ids)}] Done: {subject_id}")
-    # no test coverage needed on exception
-    except Exception:  # noqa: PERF203
-        for subject_id in subject_ids:
-            qc_table_fn(subject_id=subject_id, force_update=True)
-
-    print("QC cache update complete.")
+def main() -> None:
+    """Run the canonical QC sync job."""
+    run_sync_job("qc")
 
 
 if __name__ == "__main__":

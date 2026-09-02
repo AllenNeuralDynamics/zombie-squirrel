@@ -5,8 +5,8 @@ Ocean capsules and wired into a Nextflow pipeline, and — most importantly — 
 to **bump the `biodata-cache` version across every capsule and re-run them** so
 the pipeline always has a reproducible run in place.
 
-If you change how sync works (add/remove a table, change a job's dependencies,
-etc.), update this file.
+If you change the sync jobs or table contracts, update this file and the
+`TABLE_SPECS` manifest.
 
 ## Design in one paragraph
 
@@ -14,9 +14,8 @@ Instead of one capsule running the whole sync in a single process, each cache
 table (or logical group of tables) is built by its own **sync job**. Every job is
 the *same* capsule image, cloned once per job; the job it runs is selected at run
 time by a single environment variable. `asset_basics` runs first because every
-other job reads its output and it resets the registry; all other jobs then run in
-parallel. Each job writes its own per-table registry fragment as it finishes, so
-parallel jobs never contend on a shared JSON file.
+other job reads its output; the remaining jobs run in parallel, followed by
+`cell-by-everything`. Each job writes its own registry fragments as it finishes.
 
 ## The one environment variable
 
@@ -28,13 +27,12 @@ Also required in every capsule (unchanged from before):
 
 ### Valid values for `BIODATA_CACHE_SYNC_JOB`
 
-Run **`asset_basics` first**, then all of the rest in parallel, then
-**`cell-by-everything` last** (it projects other jobs' output):
+Run **`asset_basics` first**, then the parallel jobs, then **`cell-by-everything`**:
 
 | `BIODATA_CACHE_SYNC_JOB` | Builds | Depends on | Notes |
 |---|---|---|---|
-| `asset_basics` | `asset_basics`, `source_data` | — | **Must run first.** Clears the registry fragments, registers the version in `cache_versions.json`, then builds `asset_basics` and `source_data`. `source_data` lives here (not in `fast`) because `smartspim`/`exaspim` read it from cache and would otherwise race a parallel `fast` job and join against a stale `source_data`. |
-| `fast`            | `unique_project_names`, `unique_subject_ids`, `unique_genotypes`, `metadata_upgrade`, `platform_fib`, `platform_mouselight`, `platform_qc` | `asset_basics` | All the cheap DocDB-only tables, grouped into one capsule. |
+| `asset_basics` | `asset_basics`, `source_data` | — | **Must run first.** Registers the version, then builds `asset_basics` and `source_data`. `source_data` lives here because `smartspim` and `exaspim` read it from cache. |
+| `fast`            | `unique_project_names`, `unique_subject_ids`, `unique_genotypes`, `metadata_core`, `metadata_upgrade`, `platform_fib`, `platform_mouselight`, `platform_qc` | `asset_basics` | All the cheap metadata tables, grouped into one capsule. |
 | `qc`              | `quality_control` | `asset_basics` | Loops over every subject in `asset_basics` sequentially. |
 | `smartspim`       | `platform_smartspim` | `asset_basics` | |
 | `exaspim`         | `platform_exaspim` | `asset_basics` | |
@@ -46,39 +44,15 @@ Run **`asset_basics` first**, then all of the rest in parallel, then
 | `pophys`          | `platform_pophys` | `asset_basics` | Loops over derived `pophys`/`ophys` assets (including BCI single-plane behavior-NWB assets); traces ROI contours and writes FOV projection PNGs under `pophys_fov/` when projections are available. Slow but small; skips existing partitions. |
 | `visual_coding_ophys` | `platform_visual_coding_ophys` | `asset_basics` | Loops over canonical Visual Coding Ophys assets; caches sparse ROI contours and FOV projection PNGs under `visual_coding_ophys_fov/`. Kept separate from the generic `pophys` cache because these NWB-Zarr assets have a distinct layout. |
 | `visual_learning` | `platform_visual_learning_cell_gene`, `platform_visual_learning_coreg` | public S3 collection | Downloads the six public HCR cell-by-gene CSV/H5AD products and six ROI-to-HCR co-registration tables, writing subject_id partitions for the Visual Learning dashboard. |
+| `cell-by-everything` | `cell_index`, `cell_properties`, `cell_genes` | `ecephys_units`, `pophys`, `visual_learning` | Projects per-cell data into shared tables. Reads Visual Coding Neuropixels NWB-Zarr data directly and does not depend on manual SWDB tables. |
 | `curriculum`      | `behavior_curriculum` | `asset_basics` | |
-| `cell-by-everything` | `cell_index`, `cell_properties`, `cell_genes` | `ecephys_units`, `pophys`, `visual_learning` | **Must run after those three jobs** (and `asset_basics`), so it is *not* in `PARALLEL_JOBS`. Projects their cached per-cell output into one row per cell across every asset, and reads the public Visual Coding Neuropixels NWB-Zarr directly. It depends on no other job and never depends on a one-off script-built table. Skips `cell_properties` partitions that already exist (reusing them to rebuild `cell_index`); `cell_index` and `cell_genes` are global objects and are always rewritten. |
 | `time_to_qc`      | `time_to_qc` | `asset_basics` | |
 
-The canonical source of truth for these values is `JOBS` in
-[`src/biodata_cache/sync.py`](src/biodata_cache/sync.py). `PARALLEL_JOBS` in that
-module is exactly the set that runs after `asset_basics` — note that it excludes
-`cell-by-everything` as well, since that job runs after the fan-out rather than
-inside it. `CELL_BY_EVERYTHING_SOURCE_JOBS` lists the jobs it depends on.
-
-So the pipeline has three stages, not two:
-
-```
-asset_basics  ->  (every job in PARALLEL_JOBS, in parallel)  ->  cell-by-everything
-```
-
-`cell-by-everything` depends on only three of the parallel jobs — `ecephys_units`,
-`pophys` and `visual_learning` (`CELL_BY_EVERYTHING_SOURCE_JOBS`) — so if your
-Nextflow layout can express per-job dependencies it may start as soon as those
-three finish, in parallel with the rest. A simple trailing stage after the whole
-fan-out is also correct and costs little: the job is mostly parquet-to-parquet,
-plus one direct NWB read of the ~57 public Visual Coding Neuropixels sessions.
-
-If it runs before its sources finish it does not fail — it just projects fewer
-cells, which is worse than waiting.
-
-**It must never take a dependency on a one-off, script-built table** (the `swdb_*`
-tables, `platform_visual_coding_neuropixels_units`, `platform_swdb_dr_switch*`).
-Those are published by `scripts/build_*.py` outside the pipeline and are not
-re-run, so projecting one would silently pin these tables to whenever that script
-last ran. Where cells are only available from such a source, the reading logic is
-copied into `cell_by_everything/nwb_units.py` and the source reads from S3
-directly instead.
+The table metadata and job ownership live in `TABLE_SPECS` in
+[`src/biodata_cache/table_specs.py`](src/biodata_cache/table_specs.py). Job
+execution lives in `JOBS` in [`src/biodata_cache/sync.py`](src/biodata_cache/sync.py).
+`cell-by-everything` runs after its three source jobs, so it is excluded from
+`PARALLEL_JOBS`.
 
 An invalid or missing value raises `ValueError` listing the valid jobs, so a
 mis-set capsule fails fast rather than silently doing nothing.
@@ -96,20 +70,18 @@ if __name__ == "__main__":
     run_sync_job()  # reads BIODATA_CACHE_SYNC_JOB from the environment
 ```
 
-(Equivalently, from a shell entrypoint: `python -c "from biodata_cache.sync import run_sync_job; run_sync_job()"`.)
+The local equivalent is `python scripts/run_sync.py <job>`.
 
 To run a job explicitly without the env var (e.g. locally):
 `run_sync_job("qc")`.
 
 ## Capsule compute settings
 
-Per the design, **every** capsule uses the same modest settings and no internal
-parallelism:
+Per the design, **every** capsule uses the same modest settings:
 
 - **1 core / 8 GB RAM**
-- No multiprocessing/threading — each job processes its subjects/assets
-  sequentially. (The old `ThreadPoolExecutor` fan-out has been removed from
-  `sync.py`.)
+- Job-level parallelism is handled by the pipeline. The cell job uses bounded
+  I/O concurrency for its partition reads and writes.
 
 ## Pipeline ordering
 
@@ -127,16 +99,20 @@ asset_basics ─┼── df
               ├── visual_coding_ophys
               ├── visual_learning
               ├── curriculum
-              └── time_to_qc
+              ├── time_to_qc
+              └── cell-by-everything
 ```
 
-`asset_basics` is the single upstream dependency; every other job depends only on
-it and is independent of the others, so they all run concurrently.
+`asset_basics` feeds the parallel jobs. `cell-by-everything` runs after
+`ecephys_units`, `pophys`, and `visual_learning` finish.
 
-The `swdb_2025_bci` and `swdb_2025_v1dd` tables are **not** part of this pipeline;
-they are built on demand by [`scripts/build_swdb.py`](scripts/build_swdb.py).
+SWDB tables and the small Visual Coding Neuropixels and Dynamic Routing overview
+tables are manual datasets. They are built by their dedicated scripts and are
+marked `manual` in `TABLE_SPECS`: [`build_swdb.py`](scripts/build_swdb.py),
+[`build_swdb_dr_switch.py`](scripts/build_swdb_dr_switch.py), and
+[`build_platform_visual_coding_neuropixels_units.py`](scripts/build_platform_visual_coding_neuropixels_units.py).
 
-## Registry: how the `cache_registry.json` is written
+## Registry fragments
 
 The registry is no longer written as one file at the end of a single run.
 Instead it is stored as **one fragment per table** under the versioned folder:
@@ -158,7 +134,7 @@ data-asset-cache/bdc-v{MAJOR.MINOR}/cache_registry/<table_name>.json
   (sorted by table name). If no fragments exist it falls back to a legacy
   monolithic `cache_registry.json`, so older cache versions still read correctly.
 
-**Consumer note:** anything that reads the raw `cache_registry.json` object
+**Consumer note:** anything that reads a raw registry object
 directly from S3 (rather than through `biodata_cache.get_cache_registry()`) must
 be updated to read/merge the `cache_registry/` fragments instead. All Python
 consumers using `get_cache_registry()` need no change.
@@ -166,7 +142,7 @@ consumers using `get_cache_registry()` need no change.
 ## Bumping the biodata-cache version and re-running (the important part)
 
 All capsules pin the **same** `biodata-cache` version so the whole pipeline is a
-single reproducible run. Current pinned version: **`0.38.1`**.
+single reproducible run. The package version is **`0.42.0`** here.
 
 To move the pipeline to a new version:
 
@@ -176,15 +152,15 @@ To move the pipeline to a new version:
    (e.g. `pip install biodata-cache[sync]==<new_version>`), commit, and let Code
    Ocean rebuild the environment. Because every job is a clone of this one image,
    this is the **only** place the version is specified.
-3. Re-run the pipeline starting from `asset_basics`. `asset_basics` clears the
-   registry fragments and registers the new `bdc-v{MAJOR.MINOR}` version folder,
-   then the parallel jobs repopulate it. Older version folders remain intact.
+3. Re-run the pipeline starting from `asset_basics`. It registers the new
+   `bdc-v{MAJOR.MINOR}` version folder, then the parallel jobs populate it. Older
+   version folders remain intact.
 4. Trigger the reproducible runs. This can be done from the Code Ocean UI, or via
    the API (`POST /api/v1/computations`) once the capsules exist — see the
    [Code Ocean API docs](https://docs.codeocean.com/user-guide/code-ocean-api).
 
 > Note: the cache S3 layout is versioned by `MAJOR.MINOR` only
-> (`bdc-v{major}.{minor}`), so patch releases (e.g. `0.38.0` → `0.38.1`) write to
+> (`bdc-v{major}.{minor}`), so patch releases (e.g. `0.41.0` → `0.41.1`) write to
 > the same folder and overwrite it. A minor/major bump writes to a new folder.
 
 ## Capsule / repo locations
@@ -207,6 +183,7 @@ creation, so these are set up manually):
 | `pophys`         | _TBD_ | |
 | `visual_coding_ophys` | _TBD_ | |
 | `visual_learning` | _TBD_ | |
+| `cell-by-everything` | _TBD_ | |
 | `curriculum`     | _TBD_ | |
 | `time_to_qc`     | _TBD_ | |
 

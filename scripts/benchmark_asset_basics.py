@@ -8,6 +8,7 @@ import statistics
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 
 import duckdb
 import requests
@@ -172,16 +173,15 @@ def main() -> None:
     print("-" * 74)
 
     for case in CASES:
-        docdb_pull = (
-            lambda: pull_docdb_api(client, case.docdb_projection)
-            if case.docdb_via_api
-            else lambda: pull_docdb_http(args.host, case.docdb_projection)
-        )
+        if case.docdb_via_api:
+            docdb_pull = partial(pull_docdb_api, client, case.docdb_projection)
+        else:
+            docdb_pull = partial(pull_docdb_http, args.host, case.docdb_projection)
         docdb_durations, docdb_rows = time_pull(
             docdb_pull, args.warmups, args.repeats
         )
         cache_durations, cache_rows = time_pull(
-            lambda: pull_cache(cache_location, case.cache_columns), args.warmups, args.repeats
+            partial(pull_cache, cache_location, case.cache_columns), args.warmups, args.repeats
         )
         print_result(case, "DocDB API" if case.docdb_via_api else "HTTP", docdb_durations, docdb_rows)
         print_result(case, "cache", cache_durations, cache_rows)

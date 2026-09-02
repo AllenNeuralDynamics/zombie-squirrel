@@ -29,6 +29,7 @@ def _make_registry(basics_df=None, sessions_df=None):
         "unique_genotypes": MagicMock(),
         "asset_basics": MagicMock(return_value=basics_df),
         "source_data": MagicMock(),
+        "metadata_core": MagicMock(),
         "raw_to_derived": MagicMock(),
         "quality_control": MagicMock(),
         "platform_smartspim": MagicMock(),
@@ -97,8 +98,6 @@ def test_run_sync_job_unknown_job_raises(monkeypatch):
 
 def test_parallel_jobs_excludes_asset_basics():
     assert "asset_basics" not in PARALLEL_JOBS
-    # cell-by-everything is also excluded: it projects the tables the parallel
-    # jobs build, so it runs as a final stage rather than alongside them.
     assert "cell-by-everything" not in PARALLEL_JOBS
     assert set(PARALLEL_JOBS) | {"asset_basics", "cell-by-everything"} == set(JOBS)
 
@@ -137,16 +136,29 @@ def test_fast_job_builds_all_fast_tables(mock_registry, mock_backend):
 
     run_sync_job("fast")
 
-    for name in ("unique_project_names", "unique_subject_ids", "unique_genotypes",
-                 "metadata_upgrade", "platform_fib", "platform_mouselight"):
+    for name in (
+        "unique_project_names",
+        "unique_subject_ids",
+        "unique_genotypes",
+        "metadata_core",
+        "metadata_upgrade",
+        "platform_fib",
+        "platform_mouselight",
+    ):
         reg[name].assert_called_once_with(force_update=True)
     reg["platform_qc"].assert_has_calls(
         [call(platform="p1", force_update=True), call(platform="p2", force_update=True)]
     )
     published = {c[0][0] for c in mock_backend.put_registry_fragment.call_args_list}
     assert published == {
-        "unique_project_names", "unique_subject_ids", "unique_genotypes",
-        "metadata_upgrade", "platform_fib", "platform_mouselight", "platform_qc",
+        "unique_project_names",
+        "unique_subject_ids",
+        "unique_genotypes",
+        "metadata_core",
+        "metadata_upgrade",
+        "platform_fib",
+        "platform_mouselight",
+        "platform_qc",
     }
     # fast job never touches asset_basics or source_data (built by the asset_basics job)
     reg["asset_basics"].assert_not_called()
@@ -409,7 +421,6 @@ def test_cell_by_everything_job_builds_and_publishes_all_three(mock_build, mock_
 
 
 def test_cell_by_everything_sources_are_real_jobs():
-    """The documented upstream dependencies must stay valid job names."""
     assert set(CELL_BY_EVERYTHING_SOURCE_JOBS) <= set(JOBS)
 
 
@@ -496,10 +507,10 @@ def test_update_all_tables_propagates_exceptions(mock_registry, mock_backend):
 
 
 @patch("biodata_cache.sync.BACKEND")
-def test_publish_cache_registry_writes_a_fragment_per_table(mock_backend):
+def test_publish_cache_registry_writes_all_table_fragments(mock_backend):
     mock_backend.get_location.return_value = "s3://bucket/path"
     publish_cache_registry()
-    assert mock_backend.put_registry_fragment.call_count == 43
+    assert mock_backend.put_registry_fragment.call_count == 44
 
 
 @patch("biodata_cache.sync.BACKEND")
@@ -508,11 +519,21 @@ def test_publish_cache_registry_fragment_names(mock_backend):
     publish_cache_registry()
     names = {c[0][0] for c in mock_backend.put_registry_fragment.call_args_list}
     for expected in (
-        "unique_project_names", "unique_subject_ids", "unique_genotypes", "asset_basics",
-        "source_data", "quality_control", "platform_smartspim", "metadata_upgrade",
-        "platform_fib", "platform_qc", "platform_dynamic_foraging_sessions",
-        "platform_dynamic_foraging_trials", "platform_dynamic_foraging_events",
-        "platform_visual_learning_cell_gene", "platform_visual_learning_coreg",
+        "unique_project_names",
+        "unique_subject_ids",
+        "unique_genotypes",
+        "asset_basics",
+        "source_data",
+        "quality_control",
+        "platform_smartspim",
+        "metadata_upgrade",
+        "platform_fib",
+        "platform_qc",
+        "platform_dynamic_foraging_sessions",
+        "platform_dynamic_foraging_trials",
+        "platform_dynamic_foraging_events",
+        "platform_visual_learning_cell_gene",
+        "platform_visual_learning_coreg",
     ):
         assert expected in names
 

@@ -54,8 +54,8 @@ def _get_ssl_cert() -> str:
 
 
 def _fetch_storage_lens() -> pd.DataFrame:
-    from aind_data_access_api.secrets import get_secret
     from aind_data_access_api.rds_tables import RDSCredentials
+    from aind_data_access_api.secrets import get_secret
     from sqlalchemy import create_engine, engine, text
 
     secret = get_secret(_SECRET_NAME)

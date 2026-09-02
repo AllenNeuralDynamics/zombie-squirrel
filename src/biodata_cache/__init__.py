@@ -2,8 +2,8 @@
 
 Provides functions to fetch and cache project names, subject IDs, and asset
 metadata from the AIND metadata database with support for multiple backends.
-Also exposes get_cache_registry to retrieve the cache_registry.json registry of all
-available cache tables and their metadata.
+Also exposes get_cache_registry to retrieve the merged registry of available cache
+tables and their metadata.
 """
 
 __version__ = "0.42.0"
@@ -16,6 +16,18 @@ from biodata_cache.cache_table_helpers.cell_by_everything import (  # noqa: F401
     cell_properties,
 )
 from biodata_cache.cache_table_helpers.custom import custom  # noqa: F401
+from biodata_cache.cache_table_helpers.manual.swdb.public_collections import (  # noqa: F401
+    swdb_2025_bci,
+    swdb_2025_v1dd,
+    swdb_2026_bci,
+    swdb_2026_dynamic_routing,
+    swdb_2026_neuropixels_opto,
+    swdb_2026_v1dd,
+    swdb_2026_visual_coding_neuropixels,
+    swdb_2026_visual_coding_ophys,
+    swdb_2026_visual_learning,
+)
+from biodata_cache.cache_table_helpers.metadata_core import metadata_core  # noqa: F401
 from biodata_cache.cache_table_helpers.metadata_upgrade import metadata_upgrade  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_df import (  # noqa: F401
     platform_dynamic_foraging_events,
@@ -31,6 +43,9 @@ from biodata_cache.cache_table_helpers.platform_fib_operations import platform_f
 from biodata_cache.cache_table_helpers.platform_fib_traces import platform_fib_traces  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_mouselight import platform_mouselight  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_pophys import platform_pophys  # noqa: F401
+from biodata_cache.cache_table_helpers.platform_qc import platform_qc  # noqa: F401
+from biodata_cache.cache_table_helpers.platform_smartspim import assets_smartspim  # noqa: F401
+from biodata_cache.cache_table_helpers.platform_video_frame_times import platform_video_frame_times  # noqa: F401
 from biodata_cache.cache_table_helpers.platform_visual_coding_ophys import (  # noqa: F401
     platform_visual_coding_ophys,
 )
@@ -38,20 +53,6 @@ from biodata_cache.cache_table_helpers.platform_visual_learning import (  # noqa
     platform_visual_learning_cell_gene,
     platform_visual_learning_coreg,
 )
-from biodata_cache.cache_table_helpers.platform_qc import platform_qc  # noqa: F401
-from biodata_cache.cache_table_helpers.platform_smartspim import assets_smartspim  # noqa: F401
-from biodata_cache.cache_table_helpers.platform_swdb import (  # noqa: F401
-    swdb_2025_bci,
-    swdb_2025_v1dd,
-    swdb_2026_bci,
-    swdb_2026_v1dd,
-    swdb_2026_visual_learning,
-    swdb_2026_visual_coding_neuropixels,
-    swdb_2026_visual_coding_ophys,
-    swdb_2026_dynamic_routing,
-    swdb_2026_neuropixels_opto,
-)
-from biodata_cache.cache_table_helpers.platform_video_frame_times import platform_video_frame_times  # noqa: F401
 from biodata_cache.cache_table_helpers.qc import qc, qc_columns  # noqa: F401
 from biodata_cache.cache_table_helpers.raw_to_derived import raw_to_derived  # noqa: F401
 from biodata_cache.cache_table_helpers.source_data import source_data  # noqa: F401

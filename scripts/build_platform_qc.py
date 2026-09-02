@@ -1,32 +1,11 @@
-"""Build per-platform QC tables (tag-level statuses) and upload to S3.
+"""Run the fast sync job, including platform QC."""
 
-Usage:
-    python scripts/build_platform_qc.py [--platform spim|fib|vr|dynamic_foraging]
-"""
-
-import argparse
-import logging
-
-from biodata_cache.cache_table_helpers.platform_qc import PLATFORMS
-from biodata_cache.registry import TABLE_REGISTRY
+from biodata_cache.sync import run_sync_job
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--platform", choices=PLATFORMS, help="Build only this platform")
-    args = parser.parse_args()
-
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-
-    platform_qc = TABLE_REGISTRY["platform_qc"]
-    targets = [args.platform] if args.platform else PLATFORMS
-
-    for platform in targets:
-        logging.info(f"Building platform_qc/{platform}...")
-        df = platform_qc(platform=platform, force_update=True)
-        logging.info(f"  Done: {len(df)} rows, {df['asset_name'].nunique() if not df.empty else 0} assets")
-
-    logging.info("Done.")
+def main() -> None:
+    """Run the canonical fast sync job."""
+    run_sync_job("fast")
 
 
 if __name__ == "__main__":

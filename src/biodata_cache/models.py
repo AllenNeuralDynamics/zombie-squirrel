@@ -2,7 +2,7 @@
 
 from enum import Enum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CacheTableType(str, Enum):
@@ -31,7 +31,7 @@ class CacheTable(BaseModel):
     partitioned: bool
     partition_key: str | None = None
     type: CacheTableType
-    columns: list[Column] = []
+    columns: list[Column] = Field(default_factory=list)
 
 
 class CacheRegistry(BaseModel):

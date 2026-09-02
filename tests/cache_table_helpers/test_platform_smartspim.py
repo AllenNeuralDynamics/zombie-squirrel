@@ -434,7 +434,7 @@ def test_force_update_cold_dependency_cache(
     mock_raw_ng_link.return_value = None
     result = assets_smartspim(force_update=True)
     assert isinstance(result, pd.DataFrame)
-    hide_names = [call[0][0] for call in mock_backend.write.call_args_list]
+    write_names = [call[0][0] for call in mock_backend.write.call_args_list]
     import biodata_cache.registry as registry
 
-    assert registry.NAMES["smartspim"] in hide_names
+    assert registry.NAMES["smartspim"] in write_names

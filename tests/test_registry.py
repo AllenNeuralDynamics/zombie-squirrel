@@ -3,7 +3,7 @@
 from biodata_cache.registry import NAMES, TABLE_REGISTRY
 
 
-def test_acorn_registry_contains_all_functions():
+def test_table_registry_contains_core_functions():
     assert NAMES["upn"] in TABLE_REGISTRY
     assert NAMES["usi"] in TABLE_REGISTRY
     assert NAMES["ugt"] in TABLE_REGISTRY

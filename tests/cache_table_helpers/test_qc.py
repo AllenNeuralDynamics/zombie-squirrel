@@ -11,7 +11,7 @@ from biodata_cache.cache_table_helpers.qc import qc
 
 
 @pytest.fixture(autouse=True)
-def memory_tree():
+def memory_backend():
     registry.BACKEND = MemoryBackend()
 
 
