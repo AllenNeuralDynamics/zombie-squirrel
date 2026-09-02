@@ -6,7 +6,7 @@ Also exposes get_cache_registry to retrieve the merged registry of available cac
 tables and their metadata.
 """
 
-__version__ = "0.42.1"
+__version__ = "0.42.2"
 
 from biodata_cache.cache_table_helpers.asset_basics import asset_basics  # noqa: F401
 from biodata_cache.cache_table_helpers.behavior_curriculum import behavior_curriculum  # noqa: F401
