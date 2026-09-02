@@ -5,6 +5,7 @@ import logging
 import pandas as pd
 
 import biodata_cache.registry as registry
+from biodata_cache.backend import Predicate
 from biodata_cache.models import Column
 from biodata_cache.utils import (
     CacheLogMessage,
@@ -16,20 +17,14 @@ from biodata_cache.utils import (
 )
 
 
-@registry.register_table(registry.NAMES["basics"])
-def asset_basics(force_update: bool = False) -> pd.DataFrame:
-    """Fetch basic asset metadata including modalities, projects, and subject info.
-
-    Returns a DataFrame with columns: _id, _last_modified, created, modalities,
-    project_name, data_level, subject_id, acquisition_start_time, and
-    acquisition_end_time. Uses incremental updates based on _last_modified
-    timestamps to avoid re-fetching unchanged records.
+def _load_asset_basics(force_update: bool = False) -> pd.DataFrame:
+    """Load the complete asset basics table, refreshing it when necessary.
 
     Args:
         force_update: If True, bypass cache and fetch fresh data from database.
 
     Returns:
-        DataFrame with basic asset metadata.
+        Complete DataFrame with basic asset metadata.
 
     """
     df = registry.BACKEND.read(registry.NAMES["basics"])
@@ -237,6 +232,127 @@ def asset_basics(force_update: bool = False) -> pd.DataFrame:
         registry.BACKEND.write(registry.NAMES["basics"], df)
 
     return df
+
+
+_FILTERED_DEFAULT_COLUMNS = (
+    "_id",
+    "_last_modified",
+    "created",
+    "name",
+    "modalities",
+    "project_name",
+    "data_level",
+    "subject_id",
+    "acquisition_start_time",
+    "acquisition_end_time",
+    "process_date",
+    "genotype",
+    "age",
+    "acquisition_type",
+    "location",
+    "instrument_id",
+    "instrument_id_normalized",
+)
+
+
+def _validate_timestamp(value: str, parameter_name: str) -> None:
+    """Reject an invalid date filter consistently across both backends."""
+    try:
+        pd.to_datetime(value, utc=True, errors="raise")
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{parameter_name} must be a valid ISO timestamp") from exc
+
+
+def _asset_basics_predicates(
+    *,
+    subject_id: str | None,
+    project_name: str | None,
+    modality: str | None,
+    data_level: str | None,
+    name: str | None,
+    name_contains: str | None,
+    acquisition_start_before: str | None,
+    acquisition_start_after: str | None,
+) -> list[Predicate]:
+    """Translate the typed asset filters into backend predicates."""
+    predicates = []
+    if subject_id is not None:
+        predicates.append(Predicate("subject_id", "eq", str(subject_id)))
+    if project_name is not None:
+        predicates.append(Predicate("project_name", "eq", project_name))
+    if modality is not None:
+        predicates.append(Predicate("modalities", "contains", modality))
+    if data_level is not None:
+        predicates.append(Predicate("data_level", "eq", data_level))
+    if name is not None:
+        predicates.append(Predicate("name", "eq", name))
+    if name_contains is not None:
+        predicates.append(Predicate("name", "contains", name_contains))
+    if acquisition_start_before is not None:
+        _validate_timestamp(acquisition_start_before, "acquisition_start_before")
+        predicates.append(Predicate("acquisition_start_time", "lt", acquisition_start_before))
+    if acquisition_start_after is not None:
+        _validate_timestamp(acquisition_start_after, "acquisition_start_after")
+        predicates.append(Predicate("acquisition_start_time", "gte", acquisition_start_after))
+    return predicates
+
+
+@registry.register_table(registry.NAMES["basics"])
+def asset_basics(
+    force_update: bool = False,
+    *,
+    subject_id: str | None = None,
+    project_name: str | None = None,
+    modality: str | None = None,
+    data_level: str | None = None,
+    name: str | None = None,
+    name_contains: str | None = None,
+    acquisition_start_before: str | None = None,
+    acquisition_start_after: str | None = None,
+    columns: list[str] | None = None,
+    limit: int | None = 100,
+    offset: int = 0,
+    include_total: bool = False,
+) -> pd.DataFrame | tuple[pd.DataFrame, int]:
+    """Fetch asset metadata, optionally using a pushed-down filtered read.
+
+    Calling this function without query options retains the historical behavior:
+    it returns the complete cached table and performs incremental refreshes. A
+    filtered call reads only the requested columns and page from the published
+    cache. When ``include_total`` is true, the return value is ``(page, total)``.
+
+    ``name`` is an exact match; ``name_contains`` is a case-insensitive literal
+    substring match. Date filters use the same half-open interval semantics as
+    the MCP API: before is strict and after is inclusive.
+    """
+    predicates = _asset_basics_predicates(
+        subject_id=subject_id,
+        project_name=project_name,
+        modality=modality,
+        data_level=data_level,
+        name=name,
+        name_contains=name_contains,
+        acquisition_start_before=acquisition_start_before,
+        acquisition_start_after=acquisition_start_after,
+    )
+    filtered = bool(predicates) or columns is not None or offset != 0 or include_total or limit != 100
+    if not filtered:
+        return _load_asset_basics(force_update=force_update)
+
+    table_name = registry.NAMES["basics"]
+    if force_update or not registry.BACKEND.cache_exists(table_name):
+        _load_asset_basics(force_update=force_update)
+
+    projected_columns = _FILTERED_DEFAULT_COLUMNS if columns is None else columns
+    return registry.BACKEND.read_filtered(
+        table_name,
+        filters=predicates,
+        columns=projected_columns,
+        order_by="name",
+        limit=limit,
+        offset=offset,
+        include_total=include_total,
+    )
 
 
 def asset_basics_columns() -> list[Column]:

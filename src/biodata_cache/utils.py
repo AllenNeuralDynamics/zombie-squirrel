@@ -3,6 +3,8 @@
 import logging
 import re
 import time
+from collections.abc import Sequence
+from typing import Any
 
 import pandas as pd
 import semver
@@ -86,14 +88,20 @@ _S3_RETRY_ATTEMPTS = 5
 _S3_RETRY_BACKOFF = 2.0
 
 
-def duckdb_query(query: str) -> "pd.DataFrame":
-    """Execute a DuckDB SQL query, retrying on S3 rate-limit (503 SlowDown) errors."""
+def duckdb_query(query: str, parameters: Sequence[Any] | None = None) -> "pd.DataFrame":
+    """Execute a DuckDB query, optionally with bound parameters.
+
+    Bound parameters are used by filtered cache reads so user-supplied values
+    never become SQL text. Retries retain the existing S3 rate-limit behavior.
+    """
     import duckdb
 
     for attempt in range(_S3_RETRY_ATTEMPTS):
         try:
             with duckdb.connect() as con:
-                return con.sql(query).df()
+                if parameters is None:
+                    return con.sql(query).df()
+                return con.execute(query, parameters).df()
         except Exception as exc:
             msg = str(exc)
             if "503" in msg or "SlowDown" in msg or "Service Unavailable" in msg:

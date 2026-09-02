@@ -29,6 +29,51 @@ def test_asset_basics_cache_hit(mock_backend, mock_client_class):
     mock_client_class.assert_not_called()
 
 
+@patch("biodata_cache.cache_table_helpers.asset_basics.registry.BACKEND")
+def test_asset_basics_filtered_read_uses_backend_pushdown(mock_backend):
+    expected = pd.DataFrame({"name": ["asset[1]"]})
+    mock_backend.cache_exists.return_value = True
+    mock_backend.read_filtered.return_value = expected
+
+    result = asset_basics(
+        subject_id="subject-1",
+        project_name="Project",
+        modality="ECEPHYS",
+        name="asset[1]",
+        acquisition_start_after="2023-01-01T00:00:00Z",
+        columns=["name"],
+        limit=1,
+    )
+
+    pd.testing.assert_frame_equal(result, expected)
+    mock_backend.read.assert_not_called()
+    mock_backend.read_filtered.assert_called_once()
+    call_kwargs = mock_backend.read_filtered.call_args.kwargs
+    assert [(predicate.column, predicate.operator, predicate.value) for predicate in call_kwargs["filters"]] == [
+        ("subject_id", "eq", "subject-1"),
+        ("project_name", "eq", "Project"),
+        ("modalities", "contains", "ECEPHYS"),
+        ("name", "eq", "asset[1]"),
+        ("acquisition_start_time", "gte", "2023-01-01T00:00:00Z"),
+    ]
+    assert call_kwargs["columns"] == ["name"]
+    assert call_kwargs["limit"] == 1
+
+
+@patch("biodata_cache.cache_table_helpers.asset_basics.registry.BACKEND")
+def test_asset_basics_filtered_read_uses_lightweight_default_projection(mock_backend):
+    mock_backend.cache_exists.return_value = True
+    mock_backend.read_filtered.return_value = pd.DataFrame({"name": ["asset"]})
+
+    asset_basics(name="asset")
+
+    projected_columns = mock_backend.read_filtered.call_args.kwargs["columns"]
+    assert "name" in projected_columns
+    assert "experimenters" not in projected_columns
+    assert "investigators" not in projected_columns
+    assert "code_ocean" not in projected_columns
+
+
 @patch("aind_data_access_api.document_db.MetadataDbClient")
 @patch("biodata_cache.cache_table_helpers.asset_basics.registry.BACKEND")
 def test_asset_basics_empty_cache_fetches_from_db(mock_backend, mock_client_class):

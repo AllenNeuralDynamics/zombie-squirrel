@@ -1,12 +1,13 @@
 """Unit tests for biodata_cache.backend module."""
 
+from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
 from botocore.exceptions import ClientError
 
-from biodata_cache.backend import Backend, MemoryBackend, S3Backend
+from biodata_cache.backend import Backend, MemoryBackend, Predicate, S3Backend
 from biodata_cache.utils import BDC_VERSION
 
 _VF = f"bdc-v{BDC_VERSION}"
@@ -112,6 +113,88 @@ def test_read_multiple_all_missing(backend):
     assert isinstance(result, pd.DataFrame)
 
 
+# --- filtered reads ----------------------------------------------------------
+
+
+@pytest.fixture
+def asset_basics_frame():
+    """Small asset-basics-shaped frame used for backend parity tests."""
+    return pd.DataFrame(
+        {
+            "_id": ["id-z", "id-a", "id-b"],
+            "name": ["zeta", "asset[1]", "beta"],
+            "project_name": ["Project", "Project", "Other"],
+            "data_level": ["raw", "derived", "raw"],
+            "subject_id": ["subject-2", "subject-1", "subject-1"],
+            "modalities": [["behavior"], ["ecephys", "behavior"], ["ophys"]],
+            "acquisition_start_time": [
+                "2024-01-01T00:00:00Z",
+                "2023-01-01T00:00:00Z",
+                "2025-01-01T00:00:00Z",
+            ],
+            "unrelated_list": [["large", "value"], ["other"], ["third"]],
+        }
+    )
+
+
+def test_memory_filtered_read_matches_typed_filters_and_projection(backend, asset_basics_frame):
+    backend.write("asset_basics", asset_basics_frame)
+
+    page, total = backend.read_filtered(
+        "asset_basics",
+        filters=[
+            Predicate("project_name", "eq", "Project"),
+            Predicate("modalities", "contains", "ECEPHYS"),
+            Predicate("acquisition_start_time", "lt", "2024-01-01T00:00:00Z"),
+        ],
+        columns=["name", "subject_id"],
+        order_by="name",
+        limit=10,
+        include_total=True,
+    )
+
+    assert total == 1
+    assert list(page.columns) == ["name", "subject_id"]
+    assert page.to_dict("records") == [{"name": "asset[1]", "subject_id": "subject-1"}]
+
+
+def test_memory_filtered_read_supports_pagination_and_literal_contains(backend, asset_basics_frame):
+    backend.write("asset_basics", asset_basics_frame)
+
+    result = backend.read_filtered(
+        "asset_basics",
+        filters=[Predicate("name", "contains", "[")],
+        columns=["name"],
+        order_by="name",
+        limit=1,
+        offset=0,
+    )
+
+    assert result.to_dict("records") == [{"name": "asset[1]"}]
+
+
+def test_memory_filtered_read_empty_result_keeps_projection_and_total(backend, asset_basics_frame):
+    backend.write("asset_basics", asset_basics_frame)
+
+    result, total = backend.read_filtered(
+        "asset_basics",
+        filters={"subject_id": "does-not-exist"},
+        columns=["name", "subject_id"],
+        include_total=True,
+    )
+
+    assert result.empty
+    assert list(result.columns) == ["name", "subject_id"]
+    assert total == 0
+
+
+def test_filtered_read_rejects_unknown_columns(backend, asset_basics_frame):
+    backend.write("asset_basics", asset_basics_frame)
+
+    with pytest.raises(ValueError, match="Unknown column"):
+        backend.read_filtered("asset_basics", columns=["not_a_column"])
+
+
 # --- S3Backend ---
 
 
@@ -192,6 +275,92 @@ def test_s3_read_partitioned_table(mock_boto3_client, mock_duckdb_query):
     result = S3Backend().read("qc/subject123")
     assert f"data-asset-cache/{_VF}/qc/subject_id=subject123/data*.pqt" in mock_duckdb_query.call_args[0][0]
     pd.testing.assert_frame_equal(result, expected_df)
+
+
+@patch("biodata_cache.backend.duckdb_query")
+@patch("biodata_cache.backend.boto3.client")
+def test_s3_filtered_read_projects_columns_and_binds_literal_filter(mock_boto3_client, mock_duckdb_query):
+    mock_s3 = MagicMock()
+    mock_s3.head_object.return_value = {"ContentLength": 1}
+    mock_s3.get_object.return_value = {"Body": BytesIO(b'{"columns": ["name", "subject_id", "modalities"]}')}
+    mock_boto3_client.return_value = mock_s3
+    expected_df = pd.DataFrame({"name": ["asset[1]"]})
+    mock_duckdb_query.return_value = expected_df
+
+    literal = "asset[1]' OR 1=1 --"
+    result = S3Backend().read_filtered(
+        "asset_basics",
+        filters=[Predicate("name", "eq", literal)],
+        columns=["name"],
+        order_by="name",
+        limit=1,
+    )
+
+    query, parameters = mock_duckdb_query.call_args.args
+    assert 'SELECT "name" FROM read_parquet(' in query
+    assert "SELECT *" not in query
+    assert '"name" = ?' in query
+    assert literal not in query
+    assert parameters == [literal]
+    pd.testing.assert_frame_equal(result, expected_df)
+
+
+@patch("biodata_cache.backend.duckdb_query")
+@patch("biodata_cache.backend.boto3.client")
+def test_s3_filtered_read_reports_total_with_date_and_project_predicates(mock_boto3_client, mock_duckdb_query):
+    mock_s3 = MagicMock()
+    mock_s3.head_object.return_value = {"ContentLength": 1}
+    mock_s3.get_object.return_value = {"Body": BytesIO(
+        b'{"columns": ["name", "project_name", "acquisition_start_time"]}'
+    )}
+    mock_boto3_client.return_value = mock_s3
+    page = pd.DataFrame({"name": ["asset[1]"], "project_name": ["Project"]})
+    mock_duckdb_query.side_effect = [
+        pd.DataFrame({"__total_matches": [3]}),
+        page,
+    ]
+
+    result, total = S3Backend().read_filtered(
+        "asset_basics",
+        filters=[
+            Predicate("project_name", "eq", "Project"),
+            Predicate("acquisition_start_time", "lt", "2024-01-01T00:00:00Z"),
+            Predicate("acquisition_start_time", "gte", "2023-01-01T00:00:00Z"),
+        ],
+        columns=["name", "project_name"],
+        order_by="name",
+        limit=1,
+        offset=1,
+        include_total=True,
+    )
+
+    assert total == 3
+    pd.testing.assert_frame_equal(result, page)
+    assert mock_duckdb_query.call_count == 2
+    count_query, count_parameters = mock_duckdb_query.call_args_list[0].args
+    page_query, page_parameters = mock_duckdb_query.call_args_list[1].args
+    assert "COUNT(*)" in count_query
+    assert "LIMIT 1 OFFSET 1" in page_query
+    assert count_parameters == page_parameters == ["Project", "2024-01-01T00:00:00Z", "2023-01-01T00:00:00Z"]
+
+
+@patch("biodata_cache.backend.duckdb_query")
+@patch("biodata_cache.backend.boto3.client")
+def test_s3_filtered_missing_cache_returns_projected_empty_result(mock_boto3_client, mock_duckdb_query):
+    mock_s3 = MagicMock()
+    mock_s3.head_object.side_effect = _not_found_error()
+    mock_boto3_client.return_value = mock_s3
+
+    result, total = S3Backend().read_filtered(
+        "asset_basics",
+        columns=["name", "subject_id"],
+        include_total=True,
+    )
+
+    assert result.empty
+    assert list(result.columns) == ["name", "subject_id"]
+    assert total == 0
+    mock_duckdb_query.assert_not_called()
 
 
 @patch("biodata_cache.backend.boto3.client")

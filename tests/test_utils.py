@@ -4,6 +4,7 @@ from biodata_cache.utils import (
     BDC_VERSION,
     apply_first_name_map,
     build_first_name_map,
+    duckdb_query,
     normalize_experimenters,
     normalize_instrument_id,
     normalize_name,
@@ -14,6 +15,12 @@ from biodata_cache.utils import (
 def test_zs_version_is_string():
     assert isinstance(BDC_VERSION, str)
     assert len(BDC_VERSION) > 0
+
+
+def test_duckdb_query_binds_parameters():
+    result = duckdb_query("SELECT ? AS value", ["literal' value"])
+
+    assert result.to_dict("records") == [{"value": "literal' value"}]
 
 
 def test_normalize_instrument_id_underscore_separator():

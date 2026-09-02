@@ -5,6 +5,9 @@ import json
 import logging
 import threading
 from abc import ABC, abstractmethod
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from typing import Literal
 
 import boto3
 import pandas as pd
@@ -23,6 +26,75 @@ HIVE_PARTITION_KEYS = PARTITION_KEYS
 # S3 error codes that mean the object genuinely does not exist (a legitimate empty
 # cache) as opposed to a read failure.
 _NOT_FOUND_CODES = {"404", "NoSuchKey", "NotFound"}
+
+PredicateOperator = Literal["eq", "contains", "lt", "gte"]
+
+
+@dataclass(frozen=True, slots=True)
+class Predicate:
+    """A typed, parameterized filter for :meth:`Backend.read_filtered`."""
+
+    column: str
+    operator: PredicateOperator
+    value: object
+
+    def __post_init__(self) -> None:
+        """Validate the predicate operator at construction time."""
+        if self.operator not in {"eq", "contains", "lt", "gte"}:
+            raise ValueError(f"Unsupported predicate operator: {self.operator!r}")
+
+
+def _normalize_filters(
+    filters: Sequence[Predicate] | Mapping[str, object] | None,
+) -> tuple[Predicate, ...]:
+    """Normalize the public filter forms into typed predicates.
+
+    A mapping is accepted as a convenience for exact-match filters. Values may
+    also be ``(operator, value)`` pairs when a non-equality predicate is needed.
+    No form accepts SQL fragments.
+    """
+    if filters is None:
+        return ()
+    if isinstance(filters, Mapping):
+        normalized = []
+        for column, value in filters.items():
+            if isinstance(value, tuple) and len(value) == 2 and value[0] in {"eq", "contains", "lt", "gte"}:
+                normalized.append(Predicate(column, value[0], value[1]))
+            else:
+                normalized.append(Predicate(column, "eq", value))
+        return tuple(normalized)
+    if isinstance(filters, (str, bytes)):
+        raise TypeError("filters must be a sequence of Predicate objects or a mapping")
+    normalized = tuple(filters)
+    if not all(isinstance(predicate, Predicate) for predicate in normalized):
+        raise TypeError("filters must contain only Predicate objects")
+    return normalized
+
+
+def _validate_pagination(limit: int | None, offset: int) -> None:
+    """Validate pagination values before interpolating safe integer clauses."""
+    if limit is not None and (not isinstance(limit, int) or isinstance(limit, bool) or limit < 0):
+        raise ValueError("limit must be a non-negative integer or None")
+    if not isinstance(offset, int) or isinstance(offset, bool) or offset < 0:
+        raise ValueError("offset must be a non-negative integer")
+
+
+def _validated_identifier(name: str, available_columns: set[str] | None = None) -> str:
+    """Return a safely quoted column identifier after schema validation."""
+    if not isinstance(name, str) or not name or "\x00" in name:
+        raise ValueError(f"Invalid column name: {name!r}")
+    if available_columns is not None and name not in available_columns:
+        raise ValueError(f"Unknown column: {name!r}")
+    return '"' + name.replace('"', '""') + '"'
+
+
+def _empty_filtered_result(
+    columns: Sequence[str] | None,
+    include_total: bool,
+) -> pd.DataFrame | tuple[pd.DataFrame, int]:
+    """Build the empty result shape used for absent caches and no matches."""
+    result = pd.DataFrame(columns=list(columns)) if columns is not None else pd.DataFrame()
+    return (result, 0) if include_total else result
 
 
 class Backend(ABC):
@@ -48,6 +120,33 @@ class Backend(ABC):
 
         """
         pass  # pragma: no cover
+
+    def cache_exists(self, table_name: str) -> bool:
+        """Return whether a non-empty cache is available for ``table_name``.
+
+        Backends with a cheap storage-level existence check should override this
+        method. The fallback preserves compatibility for custom backends.
+        """
+        return not self.read(table_name).empty
+
+    def read_filtered(
+        self,
+        table_name: str,
+        *,
+        filters: Sequence[Predicate] | Mapping[str, object] | None = None,
+        columns: Sequence[str] | None = None,
+        order_by: str | None = None,
+        limit: int | None = 100,
+        offset: int = 0,
+        include_total: bool = False,
+    ) -> pd.DataFrame | tuple[pd.DataFrame, int]:
+        """Read a filtered, projected page from one cache table.
+
+        ``filters`` contains typed :class:`Predicate` values (or a mapping for
+        equality filters); callers never provide SQL. Concrete backends provide
+        the execution strategy.
+        """
+        raise NotImplementedError(f"{self.__class__.__name__} does not support filtered reads")
 
     @abstractmethod
     def get_location(self, table_name: str, partitioned: bool = False) -> str:
@@ -197,6 +296,146 @@ class S3Backend(Backend):
         if isinstance(table_name, list):
             return self._read_multiple(table_name)
         return self._read_single(table_name)
+
+    def cache_exists(self, table_name: str) -> bool:
+        """Return whether a non-empty cache object is available in S3."""
+        return self._cache_object_exists(table_name)
+
+    @staticmethod
+    def _sql_string_literal(value: str) -> str:
+        """Escape a string used as a fixed DuckDB string literal."""
+        return value.replace("'", "''")
+
+    def _parquet_key(self, table_name: str) -> str:
+        """Return the versioned S3 key or glob for a table."""
+        if "/" in table_name:
+            base, value = table_name.split("/", 1)
+            partition_key = HIVE_PARTITION_KEYS[base]
+            return f"{_CACHE_ROOT}/{_VERSION_FOLDER}/{base}/{partition_key}={value}/data*.pqt"
+        return f"{_CACHE_ROOT}/{_VERSION_FOLDER}/{table_name}.pqt"
+
+    def _parquet_uri(self, table_name: str) -> str:
+        """Return the S3 URI used by DuckDB for a table."""
+        return f"s3://{self.bucket}/{self._parquet_key(table_name)}"
+
+    def _read_sidecar_columns(self, table_name: str) -> list[str] | None:
+        """Read a table's published column sidecar when it is available."""
+        base = table_name.split("/", 1)[0]
+        key = f"{_CACHE_ROOT}/{_VERSION_FOLDER}/{base}.json"
+        try:
+            response = self.s3_client.get_object(Bucket=self.bucket, Key=key)
+            body = response["Body"].read()
+            if isinstance(body, bytes):
+                body = body.decode()
+            columns = json.loads(body).get("columns")
+            if isinstance(columns, list) and all(isinstance(column, str) for column in columns):
+                return columns
+        except ClientError as exc:
+            code = str(exc.response.get("Error", {}).get("Code", ""))
+            if code not in _NOT_FOUND_CODES:
+                raise
+        except (AttributeError, KeyError, TypeError, ValueError):
+            # Older or malformed sidecars are handled by the DuckDB schema
+            # fallback below. The parquet object remains the source of truth.
+            pass
+        return None
+
+    def _table_columns(self, table_name: str) -> list[str]:
+        """Return the columns in a cache table, preferring its sidecar."""
+        columns = self._read_sidecar_columns(table_name)
+        if columns is not None:
+            return columns
+
+        schema = duckdb_query(
+            f"DESCRIBE SELECT * FROM read_parquet('{self._sql_string_literal(self._parquet_uri(table_name))}')"
+        )
+        if "column_name" not in schema:
+            raise RuntimeError(f"Could not determine schema for cache table {table_name!r}")
+        return schema["column_name"].tolist()
+
+    def read_filtered(
+        self,
+        table_name: str,
+        *,
+        filters: Sequence[Predicate] | Mapping[str, object] | None = None,
+        columns: Sequence[str] | None = None,
+        order_by: str | None = None,
+        limit: int | None = 100,
+        offset: int = 0,
+        include_total: bool = False,
+    ) -> pd.DataFrame | tuple[pd.DataFrame, int]:
+        """Read a filtered page directly from Parquet using DuckDB pushdown."""
+        _validate_pagination(limit, offset)
+        predicates = _normalize_filters(filters)
+        requested_columns = None if columns is None else list(columns)
+        if requested_columns is not None and not requested_columns:
+            raise ValueError("columns must contain at least one column")
+
+        if not self._cache_object_exists(table_name):
+            return _empty_filtered_result(requested_columns, include_total)
+
+        needs_schema = requested_columns is not None or bool(predicates) or order_by is not None
+        available_columns = set(self._table_columns(table_name)) if needs_schema else None
+        if requested_columns is not None:
+            for column in requested_columns:
+                _validated_identifier(column, available_columns)
+        for predicate in predicates:
+            _validated_identifier(predicate.column, available_columns)
+        if order_by is not None:
+            _validated_identifier(order_by, available_columns)
+
+        select_sql = "*" if requested_columns is None else ", ".join(
+            _validated_identifier(column, available_columns) for column in requested_columns
+        )
+        where_clauses = []
+        parameters: list[object] = []
+        for predicate in predicates:
+            column = _validated_identifier(predicate.column, available_columns)
+            if predicate.operator == "eq":
+                if predicate.value is None:
+                    where_clauses.append(f"{column} IS NULL")
+                else:
+                    where_clauses.append(f"{column} = ?")
+                    parameters.append(predicate.value)
+            elif predicate.operator == "contains":
+                where_clauses.append(
+                    f"contains(lower(CAST({column} AS VARCHAR)), lower(CAST(? AS VARCHAR)))"
+                )
+                parameters.append(str(predicate.value))
+            else:
+                comparison = "<" if predicate.operator == "lt" else ">="
+                where_clauses.append(
+                    f"TRY_CAST({column} AS TIMESTAMPTZ) {comparison} TRY_CAST(? AS TIMESTAMPTZ)"
+                )
+                parameters.append(predicate.value)
+
+        source_sql = f"read_parquet('{self._sql_string_literal(self._parquet_uri(table_name))}')"
+        where_sql = f" WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+        order_sql = f" ORDER BY {_validated_identifier(order_by, available_columns)} ASC NULLS LAST" if order_by else ""
+        pagination_sql = f" LIMIT {limit}" if limit is not None else ""
+        if offset:
+            pagination_sql += f" OFFSET {offset}"
+        query = f"SELECT {select_sql} FROM {source_sql}{where_sql}{order_sql}{pagination_sql}"
+
+        try:
+            total = None
+            if include_total:
+                total_query = f"SELECT COUNT(*) AS __total_matches FROM {source_sql}{where_sql}"
+                total_result = duckdb_query(total_query, parameters)
+                total = int(total_result.iloc[0]["__total_matches"]) if not total_result.empty else 0
+            result = duckdb_query(query, parameters)
+            if include_total:
+                return result, total
+            return result
+        except Exception as exc:
+            if not self._cache_object_exists(table_name):
+                return _empty_filtered_result(requested_columns, include_total)
+            logging.error(
+                CacheLogMessage(
+                    backend="S3Backend", table=table_name, message=f"Error fetching filtered cache: {exc}"
+                ).to_json()
+            )
+            raise
 
     def clear_partition(self, table_name: str) -> None:
         """Delete all parquet chunk files in a hive partition."""
@@ -502,6 +741,83 @@ class MemoryBackend(Backend):
         if isinstance(table_name, list):
             return self._read_multiple(table_name)
         return self._read_single(table_name)
+
+    def cache_exists(self, table_name: str) -> bool:
+        """Return whether a non-empty table is available in memory."""
+        data = self._store.get(table_name)
+        return data is not None and not data.empty
+
+    def read_filtered(
+        self,
+        table_name: str,
+        *,
+        filters: Sequence[Predicate] | Mapping[str, object] | None = None,
+        columns: Sequence[str] | None = None,
+        order_by: str | None = None,
+        limit: int | None = 100,
+        offset: int = 0,
+        include_total: bool = False,
+    ) -> pd.DataFrame | tuple[pd.DataFrame, int]:
+        """Read a filtered page with the same semantics as :class:`S3Backend`."""
+        _validate_pagination(limit, offset)
+        predicates = _normalize_filters(filters)
+        requested_columns = None if columns is None else list(columns)
+        if requested_columns is not None and not requested_columns:
+            raise ValueError("columns must contain at least one column")
+
+        data = self._store.get(table_name)
+        if data is None or data.empty:
+            return _empty_filtered_result(requested_columns, include_total)
+
+        available_columns = set(data.columns)
+        if requested_columns is not None:
+            for column in requested_columns:
+                _validated_identifier(column, available_columns)
+        for predicate in predicates:
+            _validated_identifier(predicate.column, available_columns)
+        if order_by is not None:
+            _validated_identifier(order_by, available_columns)
+
+        filtered = data.copy()
+        for predicate in predicates:
+            series = filtered[predicate.column]
+            if predicate.operator == "eq":
+                if predicate.value is None:
+                    mask = series.isna()
+                elif isinstance(predicate.value, str):
+                    mask = series.astype("string") == predicate.value
+                else:
+                    mask = series == predicate.value
+            elif predicate.operator == "contains":
+                needle = str(predicate.value).lower()
+
+                def contains_value(value, needle=needle) -> bool:
+                    """Match a literal substring in scalar or list-valued cells."""
+                    if isinstance(value, (list, tuple, set)):
+                        return any(needle in str(item).lower() for item in value)
+                    try:
+                        if pd.isna(value):
+                            return False
+                    except (TypeError, ValueError):
+                        pass
+                    return needle in str(value).lower()
+
+                mask = series.map(contains_value)
+            else:
+                values = pd.to_datetime(series, utc=True, errors="coerce")
+                comparison_value = pd.to_datetime(predicate.value, utc=True, errors="raise")
+                mask = values < comparison_value if predicate.operator == "lt" else values >= comparison_value
+            filtered = filtered.loc[mask]
+
+        if order_by is not None:
+            filtered = filtered.sort_values(order_by, kind="stable", na_position="last")
+        total = len(filtered)
+        page = filtered.iloc[offset:] if limit is None else filtered.iloc[offset : offset + limit]
+        if requested_columns is not None:
+            page = page.loc[:, requested_columns]
+        else:
+            page = page.copy()
+        return (page, total) if include_total else page
 
     def _read_single(self, table_name: str) -> pd.DataFrame:
         """Fetch a single table from memory."""
