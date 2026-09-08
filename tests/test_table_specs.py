@@ -29,6 +29,9 @@ def test_table_specs_preserve_storage_contracts():
 
     assert TABLE_SPECS_BY_NAME["cell_properties"].partition_key == "asset_name"
     assert TABLE_SPECS_BY_NAME["cell_genes"].partition_key == "subject_id"
+    virtual = TABLE_SPECS_BY_NAME["platform_ecephys_virtual"]
+    assert virtual.storage_name == "platform_ecephys_virtual_index"
+    assert virtual.partition_key == "asset_name"
 
     manual_tables = [spec for spec in TABLE_SPECS if spec.lifecycle == "manual"]
     assert manual_tables

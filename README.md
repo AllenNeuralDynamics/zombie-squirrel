@@ -127,3 +127,12 @@ To rebuild everything in one local process (not used by the pipeline):
 from biodata_cache.sync import update_all_tables
 update_all_tables()
 ```
+
+The `ecephys_virtual` job publishes VirtualiZarr/Kerchunk-compatible reference
+manifests under `data-asset-cache/bdc-v{major}.{minor}/platform_ecephys_virtual/`
+and a small Parquet URL index under `platform_ecephys_virtual_index/`. It can
+be run independently after `asset_basics`:
+
+```bash
+BIODATA_CACHE_SYNC_JOB=ecephys_virtual python scripts/run_sync.py
+```

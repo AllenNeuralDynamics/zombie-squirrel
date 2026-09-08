@@ -186,6 +186,16 @@ TABLE_SPECS = (
         sync_job="ecephys_units",
     ),
     TableSpec(
+        key="ecephys_virtual",
+        name="platform_ecephys_virtual",
+        description="Virtual-Zarr references for ecephys spikes and selected unit arrays, partitioned by asset_name",
+        table_type=CacheTableType.platform,
+        columns_factory="biodata_cache.cache_table_helpers.platform_ecephys_virtual.platform_ecephys_virtual_columns",
+        partition_key="asset_name",
+        storage_name="platform_ecephys_virtual_index",
+        sync_job="ecephys_virtual",
+    ),
+    TableSpec(
         key="pophys",
         name="platform_pophys",
         description="Population physiology (multiplane-ophys) ROI contours and metadata (one row per ROI), partitioned by asset_name",

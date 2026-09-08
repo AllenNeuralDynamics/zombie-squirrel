@@ -11,6 +11,7 @@ from biodata_cache.cache_table_helpers import (  # noqa: F401
     platform_df_operations,
     platform_ecephys_spikes,
     platform_ecephys_units,
+    platform_ecephys_virtual,
     platform_exaspim,
     platform_fib,
     platform_fib_operations,

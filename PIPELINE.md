@@ -41,6 +41,7 @@ Run **`asset_basics` first**, then the parallel jobs, then **`cell-by-everything
 | `operations`      | `platform_fib_operations`, `platform_df_operations` | — | Pulls all pipeline lifecycle events from CloudWatch in **one** Logs Insights query and routes them to each `platform_*_operations` table, so the log pull is done once and reused. Overwrites every acquisition's partition each run. |
 | `ecephys_spikes`  | `platform_ecephys_spikes` | `asset_basics` | Loops over derived `ecephys` assets; skips existing partitions. |
 | `ecephys_units`   | `platform_ecephys_units` | `asset_basics` | Loops over derived `ecephys` assets; skips existing partitions. |
+| `ecephys_virtual` | `platform_ecephys_virtual` | `asset_basics` | Publishes per-asset VirtualiZarr/Kerchunk-compatible references to source NWB-Zarr spike arrays and selected unit arrays. |
 | `pophys`          | `platform_pophys` | `asset_basics` | Loops over derived `pophys`/`ophys` assets (including BCI single-plane behavior-NWB assets); traces ROI contours and writes FOV projection PNGs under `pophys_fov/` when projections are available. Slow but small; skips existing partitions. |
 | `visual_coding_ophys` | `platform_visual_coding_ophys` | `asset_basics` | Loops over canonical Visual Coding Ophys assets; caches sparse ROI contours and FOV projection PNGs under `visual_coding_ophys_fov/`. Kept separate from the generic `pophys` cache because these NWB-Zarr assets have a distinct layout. |
 | `visual_learning` | `platform_visual_learning_cell_gene`, `platform_visual_learning_coreg` | public S3 collection | Downloads the six public HCR cell-by-gene CSV/H5AD products and six ROI-to-HCR co-registration tables, writing subject_id partitions for the Visual Learning dashboard. |
@@ -95,6 +96,7 @@ asset_basics ─┼── df
               ├── operations
               ├── ecephys_spikes
               ├── ecephys_units
+              ├── ecephys_virtual
               ├── pophys
               ├── visual_coding_ophys
               ├── visual_learning
@@ -105,6 +107,30 @@ asset_basics ─┼── df
 
 `asset_basics` feeds the parallel jobs. `cell-by-everything` runs after
 `ecephys_units`, `pophys`, and `visual_learning` finish.
+
+### Virtual ecephys cache
+
+`ecephys_virtual` writes one manifest and one catalog per derived ecephys asset
+under the active version folder:
+
+```
+platform_ecephys_virtual/asset_name=<asset>/virtual-zarr.json
+platform_ecephys_virtual/asset_name=<asset>/catalog.json
+platform_ecephys_virtual_index/asset_name=<asset>/data.pqt
+```
+
+The manifest follows the `fsspec-reference-zarr-v1` interchange format used by
+VirtualiZarr/Kerchunk. It contains inline Zarr metadata and byte-range
+references to the source NWB-Zarr chunks; no spike or waveform bytes are
+copied into the cache. The manifest exposes `spike_times`,
+`spike_times_index`, probe/unit identifiers, the ecephys quality metrics used
+by the portal, `depth`, `extremum_channel_index`, and `waveform_mean` when the
+source contains the matching fields. The latter remains lazy: the website
+reads only the selected unit's waveform slice.
+
+The small Parquet index is the registry-facing table, so generic cache clients
+can discover manifest URLs without trying to interpret the JSON references as
+Parquet.
 
 SWDB tables and the small Visual Coding Neuropixels and Dynamic Routing overview
 tables are manual datasets. They are built by their dedicated scripts and are
@@ -180,6 +206,7 @@ creation, so these are set up manually):
 | `operations`     | _TBD_ | |
 | `ecephys_spikes` | _TBD_ | |
 | `ecephys_units`  | _TBD_ | |
+| `ecephys_virtual` | _TBD_ | |
 | `pophys`         | _TBD_ | |
 | `visual_coding_ophys` | _TBD_ | |
 | `visual_learning` | _TBD_ | |

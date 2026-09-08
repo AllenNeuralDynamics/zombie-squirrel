@@ -241,6 +241,19 @@ def _job_ecephys_units() -> None:
     publish_registry_fragment(NAMES["ecephys_units"])
 
 
+def _job_ecephys_virtual() -> None:
+    """Build virtual-Zarr references for each derived ecephys asset sequentially."""
+    df_basics = _load_basics()
+    location_map = _location_map(df_basics)
+    virtual_fn = TABLE_REGISTRY[NAMES["ecephys_virtual"]]
+    for asset_name in _derived_asset_names(df_basics, "ecephys"):
+        try:
+            virtual_fn(asset_name=asset_name, location=location_map.get(asset_name), force_update=True)
+        except Exception as exc:
+            logging.exception(f"ecephys_virtual failed for asset {asset_name}: {exc}")
+    publish_registry_fragment(NAMES["ecephys_virtual"])
+
+
 def _raw_name_map(names: list) -> dict:
     """Return a mapping of derived asset name -> source raw asset name from source_data."""
     df = TABLE_REGISTRY[NAMES["d2r"]]()
@@ -429,6 +442,7 @@ JOBS: dict[str, Callable[[], None]] = {
     "operations": _job_operations,
     "ecephys_spikes": _job_ecephys_spikes,
     "ecephys_units": _job_ecephys_units,
+    "ecephys_virtual": _job_ecephys_virtual,
     "pophys": _job_pophys,
     "visual_coding_ophys": _job_visual_coding_ophys,
     "visual_learning": _job_visual_learning,
@@ -491,6 +505,7 @@ def update_all_tables(fast: bool = True, slow: bool = True) -> None:
             "operations",
             "ecephys_spikes",
             "ecephys_units",
+            "ecephys_virtual",
             "pophys",
             "visual_coding_ophys",
             "visual_learning",

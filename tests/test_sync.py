@@ -45,6 +45,7 @@ def _make_registry(basics_df=None, sessions_df=None):
         "platform_df_operations": MagicMock(),
         "platform_ecephys_spikes": MagicMock(),
         "platform_ecephys_units": MagicMock(),
+        "platform_ecephys_virtual": MagicMock(),
         "platform_mouselight": MagicMock(),
         "platform_dynamic_foraging_sessions": MagicMock(return_value=sessions_df),
         "platform_dynamic_foraging_trials": MagicMock(),
@@ -322,11 +323,15 @@ def test_ecephys_jobs_run_over_ecephys_assets(mock_registry, mock_backend):
 
     run_sync_job("ecephys_spikes")
     run_sync_job("ecephys_units")
+    run_sync_job("ecephys_virtual")
 
     reg["platform_ecephys_spikes"].assert_called_once_with(
         asset_name="ec1", location="s3://bucket/ec1", force_update=True
     )
     reg["platform_ecephys_units"].assert_called_once_with(
+        asset_name="ec1", location="s3://bucket/ec1", force_update=True
+    )
+    reg["platform_ecephys_virtual"].assert_called_once_with(
         asset_name="ec1", location="s3://bucket/ec1", force_update=True
     )
 
@@ -510,7 +515,7 @@ def test_update_all_tables_propagates_exceptions(mock_registry, mock_backend):
 def test_publish_cache_registry_writes_all_table_fragments(mock_backend):
     mock_backend.get_location.return_value = "s3://bucket/path"
     publish_cache_registry()
-    assert mock_backend.put_registry_fragment.call_count == 44
+    assert mock_backend.put_registry_fragment.call_count == 45
 
 
 @patch("biodata_cache.sync.BACKEND")
